@@ -9,7 +9,7 @@ def residual_unit( x, training = False ):
         cnn = tf.layers.batch_normalization( cnn, training = training )
         cnn = tf.nn.relu( cnn )
     with tf.variable_scope("res_unit_b"):
-        cnn = tf.layers.conv1d( x, no_filt, 3, padding = "same" )
+        cnn = tf.layers.conv1d( cnn, no_filt, 3, padding = "same" )
         cnn = tf.layers.batch_normalization( cnn, training = training )
         cnn = cnn + x # shortcut
         return tf.nn.relu( cnn )
@@ -45,11 +45,13 @@ def get_net( x, training = False, use_SELU = False ):
     if use_SELU:
         with tf.variable_scope("dense_1"):
             cnn = tf.layers.dense( cnn, 128, kernel_initializer= get_initializer() )
-            cnn = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
+            if training:
+                cnn = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
             cnn = tf.nn.selu( cnn )
         with tf.variable_scope("dense_2"):
             cnn = tf.layers.dense( cnn, 128, kernel_initializer= get_initializer() )
-            cnn = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
+            if training:
+                cnn = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
             cnn = tf.nn.selu( cnn )
     else:
         with tf.variable_scope("dense_1"):
