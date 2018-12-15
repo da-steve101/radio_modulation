@@ -23,7 +23,7 @@ def parse_example( ex ):
     return signal, tf.cast( label, tf.int32 ), snr
 
 def filter_snr( sig, label, snr ):
-    return tf.math.greater( snr, 10 )
+    return tf.math.greater( snr, -12 )
 
 def batcher( input_file, batch_size, training = True ):
     dset = tf.data.TFRecordDataset( [ input_file ] )
@@ -59,9 +59,9 @@ def get_optimizer( pred, label, learning_rate ):
     tf.summary.scalar( "learning_rate", tf.reduce_sum( lr ) )
     tf.summary.scalar( "accuracy", accr )
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    opt = tf.train.AdamOptimizer( lr )
     with tf.control_dependencies(update_ops):
-        opt = tf.train.AdamOptimizer( lr )
-    return opt.minimize( err, global_step = tf.train.get_or_create_global_step() )
+        return opt.minimize( err, global_step = tf.train.get_or_create_global_step() )
 
 def test_loop( snr, pred, label, fname, no_loops ):
     pred = tf.math.argmax( pred, axis = 1 )
@@ -71,10 +71,16 @@ def test_loop( snr, pred, label, fname, no_loops ):
         no_loops = NO_TEST_BATCHES
     f_out = open( fname, "w" )
     wrt = csv.writer( f_out )
+    corr_cnt = 0
+    total_cnt = 0
     for i in tqdm(range( no_loops )):
         snr_out, pred_out, label_out = sess.run( [ snr, pred, label ] )
         for s, p, l in zip( snr_out, pred_out, label_out ):
+            if p == l:
+                corr_cnt += 1
             wrt.writerow( [ s, p, l ] )
+            total_cnt += 1
+    tf.logging.log( tf.logging.INFO, "Test done, accr = : " + str( corr_cnt / total_cnt ) )
     f_out.close()
 
 def train_loop( opt, summary_writer, no_steps = 100000 ):
@@ -109,6 +115,8 @@ def get_args():
                          help = "Batch size to use" )
     parser.add_argument( "--learning_rate", type=float, default = 0.1,
                          help = "The learning rate to use when training" )
+    parser.add_argument( "--use_SELU", action="store_true",
+                         help = "Use Self-Normalizing networks" )
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -116,7 +124,8 @@ if __name__ == "__main__":
     iterator = batcher( args.dataset, args.batch_size, not args.test )
     tf.logging.set_verbosity( tf.logging.INFO )
     signal, label, snr = iterator.get_next()
-    pred = resnet.get_net( signal, training = not args.test )
+    with tf.device('/device:GPU:0'):
+        pred = resnet.get_net( signal, training = not args.test, use_SELU = args.use_SELU )
     if not args.test:
         opt = get_optimizer( pred, label, args.learning_rate )
     init_op = tf.global_variables_initializer()
