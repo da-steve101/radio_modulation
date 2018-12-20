@@ -6,7 +6,8 @@ import argparse
 import resnet
 from tqdm import tqdm
 
-NO_TEST_BATCHES = 308 # 410*24 / 32 = 307.5
+NO_TEST_BATCHES = 154 # 410*24 / 64
+NO_TEST_EXAMPLES = NO_TEST_BATCHES * 64
 
 def parse_example( ex ):
     ftrs = {
@@ -31,8 +32,9 @@ def batcher( input_file, batch_size, training = True ):
     if training:
         dset = dset.shuffle( 8*batch_size )
         dset = dset.repeat()
-        # dset = dset.filter( filter_snr )
+        dset = dset.filter( filter_snr )
     dset = dset.batch( batch_size )
+    dset = dset.prefetch( buffer_size = 16*batch_size)
     if training:
         iterator = dset.make_initializable_iterator()
     else:
@@ -63,7 +65,7 @@ def get_optimizer( pred, label, learning_rate ):
     with tf.control_dependencies(update_ops):
         return opt.minimize( err, global_step = tf.train.get_or_create_global_step() )
 
-def test_loop( snr, pred, label, fname, no_loops ):
+def test_loop( snr, pred, label, training, fname, no_loops ):
     pred = tf.math.argmax( pred, axis = 1 )
     if fname is None:
         fname = "test_pred.csv"
@@ -74,7 +76,7 @@ def test_loop( snr, pred, label, fname, no_loops ):
     corr_cnt = 0
     total_cnt = 0
     for i in tqdm(range( no_loops )):
-        snr_out, pred_out, label_out = sess.run( [ snr, pred, label ] )
+        snr_out, pred_out, label_out = sess.run( [ snr, pred, label ], feed_dict = { training : False } )
         for s, p, l in zip( snr_out, pred_out, label_out ):
             if p == l:
                 corr_cnt += 1
@@ -83,16 +85,22 @@ def test_loop( snr, pred, label, fname, no_loops ):
     tf.logging.log( tf.logging.INFO, "Test done, accr = : " + str( corr_cnt / total_cnt ) )
     f_out.close()
 
-def train_loop( opt, summary_writer, no_steps = 100000 ):
+def train_loop( opt, summary_writer, num_correct, training, no_steps = 100000, do_val = True ):
     summaries = tf.summary.merge_all()
     curr_step = tf.train.get_global_step()
     step = sess.run( curr_step )
     tf.logging.log( tf.logging.INFO, "Starting train loop at step " + str(step) )
     try:
-        for i in tqdm( range( step, no_steps ) ):
-            step, _, smry = sess.run( [ curr_step, opt, summaries ] )
+        for i in range( step, no_steps ):
+            step, _, smry = sess.run( [ curr_step, opt, summaries ], feed_dict = { training : True } )
             if step % 20 == 0:
                 summary_writer.add_summary( smry, step )
+            if step % 10000 == 0 and do_val:
+                cnt = 0
+                for i in range( NO_TEST_BATCHES ):
+                    corr = sess.run( num_correct, feed_dict = { training : False } )
+                    cnt += corr
+                tf.logging.log( tf.logging.INFO, "Step: " + str( step ) + " - Test batch complete: accr = " + str( cnt / NO_TEST_EXAMPLES )  )
     except KeyboardInterrupt:
         tf.logging.log( tf.logging.INFO, "Ctrl-c recieved, training stopped" )
     return
@@ -103,6 +111,8 @@ def get_args():
                          help="The model name to train or test")
     parser.add_argument( "--dataset", type = str, required = True,
                          help = "The dataset to train or test on" )
+    parser.add_argument( "--val_dataset", type = str,
+                         help = "The dataset to validate on when training" )
     parser.add_argument( "--steps", type = int,
                          help = "The number of training steps" )
     parser.add_argument( "--test", action = "store_true",
@@ -113,7 +123,7 @@ def get_args():
                          help = "Number of batches to run on" )
     parser.add_argument( "--batch_size", type=int, default = 32,
                          help = "Batch size to use" )
-    parser.add_argument( "--learning_rate", type=float, default = 0.1,
+    parser.add_argument( "--learning_rate", type=float, default = 0.001,
                          help = "The learning rate to use when training" )
     parser.add_argument( "--use_SELU", action="store_true",
                          help = "Use Self-Normalizing networks" )
@@ -123,10 +133,27 @@ if __name__ == "__main__":
     args = get_args()
     iterator = batcher( args.dataset, args.batch_size, not args.test )
     tf.logging.set_verbosity( tf.logging.INFO )
-    signal, label, snr = iterator.get_next()
-    with tf.device('/device:GPU:0'):
-        pred = resnet.get_net( signal, training = not args.test, use_SELU = args.use_SELU )
+    training = tf.placeholder( tf.bool, name = "training" )
     if not args.test:
+        train_signal, train_label, train_snr = iterator.get_next()
+        do_val = True
+        if args.val_dataset is not None:
+            test_iterator = batcher( args.val_dataset, args.batch_size, not args.test )
+            test_signal, test_label, test_snr = test_iterator.get_next()
+            signal = tf.where( training, train_signal, test_signal )
+            label = tf.where( training, train_label, test_label )
+            snr = tf.where( training, train_snr, test_snr )
+        else:
+            signal, label, snr = ( train_signal, train_label, train_snr )
+            do_val = False
+    else:
+        signal, label, snr = iterator.get_next()
+    with tf.device('/device:GPU:0'):
+        pred = resnet.get_net( signal, training = training, use_SELU = args.use_SELU )
+    if not args.test:
+        pred_label = tf.cast( tf.math.argmax( pred, axis = 1 ), tf.int32 )
+        num_correct = tf.reduce_sum( tf.cast( tf.math.equal( pred_label, label ), tf.float32 ) )
+        num_correct = tf.reshape( num_correct, [] )
         opt = get_optimizer( pred, label, args.learning_rate )
     init_op = tf.global_variables_initializer()
     saver = tf.train.Saver()
@@ -134,16 +161,17 @@ if __name__ == "__main__":
         try:
             if not args.test:
                 smry_wrt = tf.summary.FileWriter( args.model_name + "_logs", sess.graph, session = sess )
-                sess.run( iterator.initializer )    
+                sess.run( iterator.initializer )
+                sess.run( test_iterator.initializer )
             sess.run( init_op )
             # load the model if possible
             if tf.train.checkpoint_exists( args.model_name ):
                 tf.logging.log( tf.logging.INFO, "Loading model ... " )
                 saver.restore(sess, args.model_name )
             if args.test:
-                test_loop( snr, pred, label, args.test_output, args.test_batches )
+                test_loop( snr, pred, label, training, args.test_output, args.test_batches )
             else:
-                train_loop( opt, smry_wrt, no_steps = args.steps )
+                train_loop( opt, smry_wrt, num_correct, training, no_steps = args.steps, do_val = do_val )
                 tf.logging.log( tf.logging.INFO, "Saving model ... " )
                 saver.save( sess, args.model_name )
         except tf.errors.OutOfRangeError:

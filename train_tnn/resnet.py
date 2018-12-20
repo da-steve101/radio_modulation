@@ -26,7 +26,7 @@ def residual_stack( x, no_filt, training = False ):
     return cnn
 
 def get_initializer():
-    return tf.contrib.layers.variance_scaling_initializer( factor = 1.0 )
+    return tf.variance_scaling_initializer(scale=1.0, mode='fan_in')
 
 def get_net( x, training = False, use_SELU = False ):
     with tf.variable_scope("block_1"):
@@ -44,15 +44,15 @@ def get_net( x, training = False, use_SELU = False ):
     cnn = tf.layers.flatten( cnn )
     if use_SELU:
         with tf.variable_scope("dense_1"):
-            cnn = tf.layers.dense( cnn, 128, kernel_initializer= get_initializer() )
-            if training:
-                cnn = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
+            cnn = tf.layers.dense( cnn, 128, kernel_initializer = get_initializer() )
             cnn = tf.nn.selu( cnn )
+            dropped = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
+            cnn = tf.where( training, dropped, cnn )
         with tf.variable_scope("dense_2"):
-            cnn = tf.layers.dense( cnn, 128, kernel_initializer= get_initializer() )
-            if training:
-                cnn = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
+            cnn = tf.layers.dense( cnn, 128, kernel_initializer = get_initializer() )
             cnn = tf.nn.selu( cnn )
+            dropped = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
+            cnn = tf.where( training, dropped, cnn )
     else:
         with tf.variable_scope("dense_1"):
             cnn = tf.layers.dense( cnn, 128 )
