@@ -29,6 +29,11 @@ def get_initializer():
     return tf.variance_scaling_initializer(scale=1.0, mode='fan_in')
 
 def get_net( x, training = False, use_SELU = False ):
+    # remove the bias from all examples and make
+    mean, var = tf.nn.moments(x, axes=[1])
+    mean = tf.expand_dims( mean, 1 )
+    mean = tf.tile( mean, [ 1, x.get_shape()[1], 1 ] )
+    x = ( x - mean )
     with tf.variable_scope("block_1"):
         cnn = residual_stack( x, 32, training = training )
     with tf.variable_scope("block_2"):

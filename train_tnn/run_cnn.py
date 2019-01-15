@@ -4,6 +4,7 @@ import tensorflow as tf
 import csv
 import argparse
 import resnet
+import Vgg10
 from tqdm import tqdm
 
 NO_TEST_BATCHES = 154 # 410*24 / 64
@@ -117,6 +118,8 @@ def get_args():
                          help = "The number of training steps" )
     parser.add_argument( "--test", action = "store_true",
                          help = "Test the model on this dataset" )
+    parser.add_argument( "--use_VGG", action = "store_true",
+                         help = "Use Vgg instead of resnet" )
     parser.add_argument( "--test_output", type = str,
                          help = "Filename to save the output in csv format ( pred, label )" )
     parser.add_argument( "--test_batches", type = int, default = NO_TEST_BATCHES,
@@ -149,7 +152,10 @@ if __name__ == "__main__":
     else:
         signal, label, snr = iterator.get_next()
     with tf.device('/device:GPU:0'):
-        pred = resnet.get_net( signal, training = training, use_SELU = args.use_SELU )
+        if args.use_VGG:
+            pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU )
+        else:
+            pred = resnet.get_net( signal, training = training, use_SELU = args.use_SELU )
     if not args.test:
         pred_label = tf.cast( tf.math.argmax( pred, axis = 1 ), tf.int32 )
         num_correct = tf.reduce_sum( tf.cast( tf.math.equal( pred_label, label ), tf.float32 ) )
