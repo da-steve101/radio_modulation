@@ -6,6 +6,8 @@ import argparse
 import resnet
 import Vgg10
 from tqdm import tqdm
+import os
+import quantization as q
 
 NO_TEST_BATCHES = 154 # 410*24 / 64
 NO_TEST_EXAMPLES = NO_TEST_BATCHES * 64
@@ -49,12 +51,15 @@ def get_optimizer( pred, label, learning_rate ):
         name = "softmax_err_func"
     )
     tf.summary.scalar( "train_err", tf.reduce_sum( err ) )
+    '''
     lr = tf.train.exponential_decay(
         learning_rate,
         tf.train.get_or_create_global_step(),
         100000,
         0.96
     )
+    '''
+    lr = learning_rate
     pred = tf.math.argmax( pred, axis = 1 )
     correct = tf.cast( tf.math.equal( pred, tf.cast( label, tf.int64 ) ), tf.float32 )
     accr = tf.reduce_mean( correct )
@@ -126,15 +131,104 @@ def get_args():
                          help = "Number of batches to run on" )
     parser.add_argument( "--batch_size", type=int, default = 32,
                          help = "Batch size to use" )
+    parser.add_argument( "--quantize_w", type=int,
+                         help = "Quantize Weights" )
+    parser.add_argument( "--quantize_act", type=int,
+                         help = "Quantize Activations" )
     parser.add_argument( "--learning_rate", type=float, default = 0.001,
                          help = "The learning rate to use when training" )
     parser.add_argument( "--use_SELU", action="store_true",
                          help = "Use Self-Normalizing networks" )
     return parser.parse_args()
 
+def weights_diff_err( quantize_w, scaling = 0.1 ):
+    coll = tf.get_collection( "Weights" )
+    total_full = 0
+    total_quant = 0
+    for i in [ str(i) for i in range( 1, 8 ) ]:
+        cnn_weights = [ w for w in coll if i in w.name ]
+        if "full" in cnn_weights[0].name:
+            full_w = cnn_weights[0]
+            quant_w = cnn_weights[1]
+        else:
+            quant_w = cnn_weights[0]
+            full_w = cnn_weights[1]
+        '''
+        if quantize_w:
+            full_w = q.quantize_weights( full_w, quantize_w )
+        '''
+        total_full += tf.reduce_sum( tf.square( full_w - tf.stop_gradient( quant_w ) ) )
+        total_quant += tf.reduce_sum( tf.square( tf.stop_gradient( full_w ) - quant_w ) )
+    errA = total_full*scaling/14
+    errB = total_quant*scaling/14
+    return errA, errB
+
+def guided_training_opt( full_prec_pred, quant_pred, label, learning_rate, quantize_w ):
+    full_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        labels = label,
+        logits = full_prec_pred,
+        name = "softmax_err_func_f"
+    )
+    tf.summary.scalar( "train_err_full", tf.reduce_sum( full_err ) )
+    quant_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        labels = label,
+        logits = quant_pred,
+        name = "softmax_err_func_q"
+    )
+    tf.summary.scalar( "train_err_quant", tf.reduce_sum( quant_err ) )
+    weights_errA, weights_errB = weights_diff_err( quantize_w )
+    lr = tf.train.exponential_decay(
+        learning_rate,
+        tf.train.get_or_create_global_step(),
+        100000,
+        0.96
+    )
+    # lr = learning_rate
+    pred = tf.math.argmax( quant_pred, axis = 1 )
+    correct = tf.cast( tf.math.equal( pred, tf.cast( label, tf.int64 ) ), tf.float32 )
+    accr = tf.reduce_mean( correct )
+    tf.summary.histogram( "preds", pred )
+    tf.summary.scalar( "learning_rate", tf.reduce_sum( lr ) )
+    tf.summary.scalar( "accuracy", accr )
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    tf.summary.scalar( "weights_errA", weights_errA )
+    tf.summary.scalar( "weights_errB", weights_errB )
+    tf.summary.scalar( "full_err", tf.reduce_mean( full_err ) )
+    tf.summary.scalar( "quant_err", tf.reduce_mean( quant_err ) )
+    err_A = full_err + weights_errA
+    err_B = quant_err + weights_errB
+    opt_A = tf.train.AdamOptimizer( lr )
+    opt_B = tf.train.AdamOptimizer( lr )
+    with tf.control_dependencies(update_ops):
+        op_A = opt_A.minimize( err_A, global_step = tf.train.get_or_create_global_step() )
+        op_B = opt_B.minimize( err_B, global_step = tf.train.get_or_create_global_step() )
+    return op_A, op_B
+
+def guided_train_loop( opt_A, opt_B, summary_writer, num_correct, training, no_steps = 100000, do_val = True ):
+    summaries = tf.summary.merge_all()
+    curr_step = tf.train.get_global_step()
+    step = sess.run( curr_step )
+    tf.logging.log( tf.logging.INFO, "Starting train loop at step " + str(step) )
+    try:
+        for i in range( step, no_steps ):
+            step_A, _, smry_A = sess.run( [ curr_step, opt_A, summaries ], feed_dict = { training : True } )
+            step, _, smry_B = sess.run( [ curr_step, opt_B, summaries ], feed_dict = { training : True } )
+            if step_A % 40 == 0:
+                summary_writer.add_summary( smry_B, step_A )
+            if step_A % 20000 == 0 and do_val:
+                cnt = 0
+                for i in range( NO_TEST_BATCHES ):
+                    corr = sess.run( num_correct, feed_dict = { training : False } )
+                    cnt += corr
+                tf.logging.log( tf.logging.INFO, "Step: " + str( step ) + " - Test batch complete: accr = " + str( cnt / NO_TEST_EXAMPLES )  )
+    except KeyboardInterrupt:
+        tf.logging.log( tf.logging.INFO, "Ctrl-c recieved, training stopped" )
+    return
+    
 if __name__ == "__main__":
     args = get_args()
     iterator = batcher( args.dataset, args.batch_size, not args.test )
+    os.environ["CUDA_VISIBLE_DEVICES"]="0"
     tf.logging.set_verbosity( tf.logging.INFO )
     training = tf.placeholder( tf.bool, name = "training" )
     if not args.test:
@@ -153,14 +247,29 @@ if __name__ == "__main__":
         signal, label, snr = iterator.get_next()
     with tf.device('/device:GPU:0'):
         if args.use_VGG:
-            pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU )
+            if args.quantize_w is None:
+                quantize_w = False
+            else:
+                quantize_w = args.quantize_w
+            if args.quantize_act is None:
+                quantize_act = False
+            else:
+                quantize_act = args.quantize_act
+            with tf.variable_scope( "full" ):
+                full_prec_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU )
+            with tf.variable_scope( "quant" ):
+                quant_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU, quantize_w = quantize_w, quantize_act = quantize_act )
+            pred = quant_pred
         else:
             pred = resnet.get_net( signal, training = training, use_SELU = args.use_SELU )
     if not args.test:
         pred_label = tf.cast( tf.math.argmax( pred, axis = 1 ), tf.int32 )
         num_correct = tf.reduce_sum( tf.cast( tf.math.equal( pred_label, label ), tf.float32 ) )
         num_correct = tf.reshape( num_correct, [] )
-        opt = get_optimizer( pred, label, args.learning_rate )
+        if args.use_VGG:
+            opt_f, opt_q = guided_training_opt( full_prec_pred, quant_pred, label, args.learning_rate, quantize_w )
+        else:
+            opt = get_optimizer( pred, label, args.learning_rate )
     init_op = tf.global_variables_initializer()
     saver = tf.train.Saver()
     with tf.Session() as sess:
@@ -177,7 +286,10 @@ if __name__ == "__main__":
             if args.test:
                 test_loop( snr, pred, label, training, args.test_output, args.test_batches )
             else:
-                train_loop( opt, smry_wrt, num_correct, training, no_steps = args.steps, do_val = do_val )
+                if args.use_VGG:
+                    guided_train_loop( opt_f, opt_q, smry_wrt, num_correct, training, no_steps = args.steps, do_val = do_val )
+                else:
+                    train_loop( opt, smry_wrt, num_correct, training, no_steps = args.steps, do_val = do_val )
                 tf.logging.log( tf.logging.INFO, "Saving model ... " )
                 saver.save( sess, args.model_name )
         except tf.errors.OutOfRangeError:

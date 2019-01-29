@@ -10,17 +10,22 @@ C) Teacher student
 
 import tensorflow as tf
 
+def stop_grad( real, quant ):
+    return real + tf.stop_gradient( quant - real )
+
 def quantize( zr, k ):
-    scaling = tf.pow( 2, k ) - 1
+    scaling = tf.cast( tf.pow( 2.0, k ) - 1, tf.float32 )
     return tf.round( scaling * zr )/scaling
 
 def quantize_weights( w, k ):
     # normalize first
-    zr = ( tf.tanh( w )/( 2 * tf.maximum( tf.abs( tf.tanh( w ) ) ) ) ) + 0.5
-    return quantize( zr, k )
+    zr = tf.tanh( w )/( tf.reduce_max( tf.abs( tf.tanh( w ) ) ) )
+    quant = quantize( zr, k )
+    return stop_grad( w, quant )
 
 def quantize_activations( xr, k ):
     clipped = tf.clip_by_value( xr, 0, 1 )
-    return quantize( clipped, k )
+    quant = quantize( clipped, k )
+    return stop_grad( xr, quant )
 
 
