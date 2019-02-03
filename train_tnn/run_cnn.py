@@ -8,6 +8,7 @@ import Vgg10
 from tqdm import tqdm
 import os
 import quantization as q
+from tensorflow.python import pywrap_tensorflow
 
 NO_TEST_BATCHES = 154 # 410*24 / 64
 NO_TEST_EXAMPLES = NO_TEST_BATCHES * 64
@@ -51,15 +52,13 @@ def get_optimizer( pred, label, learning_rate ):
         name = "softmax_err_func"
     )
     tf.summary.scalar( "train_err", tf.reduce_sum( err ) )
-    '''
     lr = tf.train.exponential_decay(
         learning_rate,
         tf.train.get_or_create_global_step(),
         100000,
         0.96
     )
-    '''
-    lr = learning_rate
+    # lr = learning_rate
     pred = tf.math.argmax( pred, axis = 1 )
     correct = tf.cast( tf.math.equal( pred, tf.cast( label, tf.int64 ) ), tf.float32 )
     accr = tf.reduce_mean( correct )
@@ -163,6 +162,55 @@ def weights_diff_err( quantize_w, scaling = 0.1 ):
     errB = total_quant*scaling/14
     return errA, errB
 
+def teacher_student_opt( resnet_pred, quant_pred, label, learning_rate, quantize_w ):
+    l2_loss = tf.nn.l2_loss( tf.stop_gradient( resnet_pred ) - quant_pred )/4000
+    quant_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        labels = label,
+        logits = quant_pred,
+        name = "softmax_err_func_q"
+    )
+    res_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        labels = label,
+        logits = resnet_pred,
+        name = "softmax_err_func_r"
+    )
+    lr = tf.train.exponential_decay(
+        learning_rate,
+        tf.train.get_or_create_global_step(),
+        100000,
+        0.96
+    )
+    coll = tf.get_collection( "Weights" )
+    weight_relu = 0
+    for w in coll:
+        weight_relu = tf.reduce_sum( tf.nn.relu( tf.math.abs( w ) - 1.5 ) )
+    coll = tf.get_collection( "Quant_Errs" )
+    weight_reg = 0
+    for w in coll:
+        weight_reg += tf.reduce_sum( w )
+    coll = tf.get_collection( "Activations_opt" )
+    act_reg = 0
+    for w in coll:
+        act_reg += tf.reduce_sum( w )
+    total_loss = l2_loss + quant_err + weight_relu/100 + 5*weight_reg + act_reg/10000000000
+    tf.summary.scalar( "guidence_loss", tf.reduce_sum( l2_loss ) )
+    tf.summary.scalar( "student_loss", tf.reduce_sum( quant_err ) )
+    tf.summary.scalar( "teacher_loss", tf.reduce_sum( res_err ) )
+    tf.summary.scalar( "weight_reg", tf.reduce_sum( weight_reg ) )
+    tf.summary.scalar( "weight_relu", tf.reduce_sum( weight_relu ) )
+    tf.summary.scalar( "act_reg", tf.reduce_sum( act_reg ) )
+    pred = tf.math.argmax( quant_pred, axis = 1 )
+    correct = tf.cast( tf.math.equal( pred, tf.cast( label, tf.int64 ) ), tf.float32 )
+    accr = tf.reduce_mean( correct )
+    tf.summary.histogram( "preds", pred )
+    tf.summary.scalar( "accuracy", accr )
+    tf.summary.scalar( "learning_rate", tf.reduce_sum( lr ) )
+    opt_A = tf.train.AdamOptimizer( lr )
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(update_ops):
+        op_A = opt_A.minimize( total_loss, global_step = tf.train.get_or_create_global_step() )
+    return op_A
+
 def guided_training_opt( full_prec_pred, quant_pred, label, learning_rate, quantize_w ):
     full_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
         labels = label,
@@ -213,9 +261,9 @@ def guided_train_loop( opt_A, opt_B, summary_writer, num_correct, training, no_s
         for i in range( step, no_steps ):
             step_A, _, smry_A = sess.run( [ curr_step, opt_A, summaries ], feed_dict = { training : True } )
             step, _, smry_B = sess.run( [ curr_step, opt_B, summaries ], feed_dict = { training : True } )
-            if step_A % 40 == 0:
+            if step_A % 40 in [ 0, 1 ]:
                 summary_writer.add_summary( smry_B, step_A )
-            if step_A % 20000 == 0 and do_val:
+            if step_A % 20000 in [ 0, 1 ] and do_val:
                 cnt = 0
                 for i in range( NO_TEST_BATCHES ):
                     corr = sess.run( num_correct, feed_dict = { training : False } )
@@ -255,8 +303,10 @@ if __name__ == "__main__":
                 quantize_act = False
             else:
                 quantize_act = args.quantize_act
-            with tf.variable_scope( "full" ):
-                full_prec_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU )
+            with tf.variable_scope( "resnet" ):
+                res_pred = resnet.get_net( signal, training = False, use_SELU = args.use_SELU )
+            # with tf.variable_scope( "full" ):
+            #    full_prec_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU )
             with tf.variable_scope( "quant" ):
                 quant_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU, quantize_w = quantize_w, quantize_act = quantize_act )
             pred = quant_pred
@@ -267,10 +317,26 @@ if __name__ == "__main__":
         num_correct = tf.reduce_sum( tf.cast( tf.math.equal( pred_label, label ), tf.float32 ) )
         num_correct = tf.reshape( num_correct, [] )
         if args.use_VGG:
-            opt_f, opt_q = guided_training_opt( full_prec_pred, quant_pred, label, args.learning_rate, quantize_w )
+            opt_q = teacher_student_opt( res_pred, quant_pred, label, args.learning_rate, quantize_w )
+            # opt_q = get_optimizer( res_pred, label, args.learning_rate )
+            opt_f = opt_q
+            # opt_f, opt_q = guided_training_opt( full_prec_pred, quant_pred, label, args.learning_rate, quantize_w )
         else:
             opt = get_optimizer( pred, label, args.learning_rate )
     init_op = tf.global_variables_initializer()
+    res_only = False
+    if res_only:
+        reader = pywrap_tensorflow.NewCheckpointReader( args.model_name )
+        var_to_shape_map = reader.get_variable_to_shape_map()
+        # tensors_to_load = set([ x for x in var_to_shape_map if "resnet" in x ])
+        tensors_to_load = set([ x for x in var_to_shape_map if "quant/lyr" not in x or "scaling/Adam" not in x ])
+        nodes = {}
+        grph = tf.get_default_graph()
+        for n in grph.as_graph_def().node:
+            if n.name in tensors_to_load:
+                tnsr = grph.as_graph_element( n.name ).outputs[0]
+                nodes[n.name] = tnsr
+        res_saver = tf.train.Saver( nodes )
     saver = tf.train.Saver()
     with tf.Session() as sess:
         try:
@@ -282,7 +348,10 @@ if __name__ == "__main__":
             # load the model if possible
             if tf.train.checkpoint_exists( args.model_name ):
                 tf.logging.log( tf.logging.INFO, "Loading model ... " )
-                saver.restore(sess, args.model_name )
+                if res_only:
+                    res_saver.restore( sess, args.model_name )
+                else:
+                    saver.restore(sess, args.model_name )
             if args.test:
                 test_loop( snr, pred, label, training, args.test_output, args.test_batches )
             else:

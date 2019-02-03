@@ -33,25 +33,42 @@ def batch_norm_quantized( x, training, decay, quantize_w = False, quantize_act =
         cnn = q.quantize_activations( cnn, quantize_act )
     return cnn
 
-def get_conv_layer( x, training, no_filt = 64, quantize_w = False, quantize_act = False ):
+def get_conv_layer( x, training, no_filt = 128, quantize_w = False, quantize_act = False ):
     filter_shape = [ 3, x.get_shape()[-1], no_filt ]
-    conv_filter = tf.get_variable( "conv_filter", filter_shape, initializer = get_initializer_conv() )
+    starting_dist_scale = 10
+    conv_filter = starting_dist_scale*tf.get_variable( "conv_filter", filter_shape, initializer = get_initializer_conv() )
     if quantize_w:
-        conv_filter = q.quantize_weights( conv_filter, quantize_w )
+        constrained = q.quantize_weights( conv_filter, quantize_w )
+        err_q = tf.stop_gradient( conv_filter - conv_filter )
+    else:
+        constrained = tf.stop_gradient( tf.round( tf.clip_by_value( conv_filter, -1, 1 ) ) )
+        err_q = tf.losses.absolute_difference( conv_filter, constrained )
+    tf.add_to_collection( "Quant_Errs", err_q )
     tf.add_to_collection( "Weights", conv_filter )
-    # scaling = tf.reduce_max( x, 0 )
-    cnn = x #  / scaling
+    if quantize_w:
+        conv_filter = constrained
+    else:
+        conv_filter = conv_filter + tf.stop_gradient( conv_filter * tf.math.abs( tf.round( tf.clip_by_value( 5*conv_filter, -1, 1 ) ) ) - conv_filter )
+    cnn = x
     cnn = tf.nn.conv1d( cnn, conv_filter, 1, padding = "SAME" )
+    scaling = tf.get_variable( "scaling", [ no_filt ], initializer = tf.ones_initializer() )/ starting_dist_scale
+    act_reg = tf.stop_gradient( cnn ) * tf.math.abs( scaling )
+    # relu regularizer to pull scaling down to near 1
+    cnn_pull = tf.nn.relu( act_reg - 1.25 )
+    # need something to push scaling up from zero too
+    cnn_push = tf.nn.relu( 0.5 - tf.math.abs( act_reg ) ) # minimize this to push from 0.5 to 1/0/-1
+    tf.add_to_collection( "Activations_opt", cnn_pull  + cnn_push )    
+    cnn = cnn * tf.stop_gradient( tf.math.abs( scaling ) )
     if quantize_act:
         cnn = q.quantize_activations( cnn, quantize_act )
     # cnn = batch_norm_quantized( cnn, training, 0.99, quantize_w = quantize_w, quantize_act = quantize_act )
     with tf.device('/device:CPU:0'):
         tf.summary.scalar( "conv_act_mean", tf.reduce_mean( cnn ) )
         tf.summary.scalar( "conv_act_max", tf.reduce_max( cnn ) )
-    scaling = tf.maximum( tf.reduce_max( cnn, 0 ), 1 )
-    cnn = cnn / scaling
+        tf.summary.histogram( "scaling", scaling )
+        tf.summary.histogram( "conv_dist", cnn )
+        tf.summary.histogram( "conv_filter", conv_filter )
     cnn = tf.nn.relu( cnn )
-    # cnn = tf.clip_by_value( cnn, 0, 1 )
     if quantize_act:
         cnn = q.quantize_activations( cnn, quantize_act )
     cnn = tf.layers.max_pooling1d( cnn, 2, 2 )
@@ -71,19 +88,19 @@ def get_net( x, training = False, use_SELU = False, quantize_w = False, quantize
     mean = tf.tile( mean, [ 1, x.get_shape()[1], 1 ] )
     x = ( x - mean )
     with tf.variable_scope("lyr1"):
-        cnn = get_conv_layer( x, training ) #, quantize_w = quantize_w, quantize_act = quantize_act )
+        cnn = get_conv_layer( x, training ) # , quantize_w = quantize_w, quantize_act = quantize_act )
     with tf.variable_scope("lyr2"):
-        cnn = get_conv_layer( cnn, training, quantize_w = quantize_w, quantize_act = quantize_act )
+        cnn = get_conv_layer( cnn, training) # , quantize_w = quantize_w, quantize_act = quantize_act )
     with tf.variable_scope("lyr3"):
-        cnn = get_conv_layer( cnn, training, quantize_w = quantize_w, quantize_act = quantize_act )
+        cnn = get_conv_layer( cnn, training) # , quantize_w = quantize_w, quantize_act = quantize_act )
     with tf.variable_scope("lyr4"):
-        cnn = get_conv_layer( cnn, training, quantize_w = quantize_w, quantize_act = quantize_act )
+        cnn = get_conv_layer( cnn, training) # , quantize_w = quantize_w, quantize_act = quantize_act )
     with tf.variable_scope("lyr5"):
-        cnn = get_conv_layer( cnn, training, quantize_w = quantize_w, quantize_act = quantize_act )
+        cnn = get_conv_layer( cnn, training) # , quantize_w = quantize_w, quantize_act = quantize_act )
     with tf.variable_scope("lyr6"):
-        cnn = get_conv_layer( cnn, training, quantize_w = quantize_w, quantize_act = quantize_act )
+        cnn = get_conv_layer( cnn, training) # , quantize_w = quantize_w, quantize_act = quantize_act )
     with tf.variable_scope("lyr7"):
-        cnn = get_conv_layer( cnn, training, quantize_w = quantize_w, quantize_act = quantize_act )
+        cnn = get_conv_layer( cnn, training, quantize_w = 1, quantize_act = quantize_act )
     cnn = tf.layers.flatten( cnn )
     if use_SELU:
         dense_1 = tf.get_variable( "dense_8", [ cnn.get_shape()[-1], 128 ], initializer = get_initializer() )

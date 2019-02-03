@@ -19,7 +19,8 @@ def quantize( zr, k ):
 
 def quantize_weights( w, k ):
     # normalize first
-    zr = tf.tanh( w )/( tf.reduce_max( tf.abs( tf.tanh( w ) ) ) )
+    # zr = tf.tanh( w )/( tf.reduce_max( tf.abs( tf.tanh( w ) ) ) )
+    zr = tf.clip_by_value( w, -1, 1 )
     quant = quantize( zr, k )
     return stop_grad( w, quant )
 
