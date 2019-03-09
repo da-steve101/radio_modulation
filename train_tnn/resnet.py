@@ -1,27 +1,46 @@
 #! /usr/bin/python3
 
 import tensorflow as tf
+import quantization as q
 
-def residual_unit( x, training = False ):
-    no_filt = x.get_shape().as_list()[-1]
+def residual_unit( x, training = False, nu = None ):
+    no_filt = x.get_shape()[-1]
+    filter_shape = [ 3, no_filt, no_filt ]
     with tf.variable_scope("res_unit_a"):
-        cnn = tf.layers.conv1d( x, no_filt, 3, padding = "same" )
+        conv_filter = tf.get_variable( "conv_filter", filter_shape )
+        if nu is not None:
+            conv_filter = q.trinarize( conv_filter, nu = nu  )
+        cnn = tf.nn.conv1d( x, conv_filter, 1, padding = "SAME" )
         cnn = tf.layers.batch_normalization( cnn, training = training )
-        cnn = tf.nn.relu( cnn )
+        if nu is not None:
+            cnn = q.shaped_relu( cnn )
+        else:
+            cnn = tf.nn.relu( cnn )
     with tf.variable_scope("res_unit_b"):
-        cnn = tf.layers.conv1d( cnn, no_filt, 3, padding = "same" )
+        conv_filter = tf.get_variable( "conv_filter", filter_shape )
+        if nu is not None:
+            conv_filter = q.trinarize( conv_filter, nu = nu  )
+        cnn = tf.nn.conv1d( x, conv_filter, 1, padding = "SAME" )
         cnn = tf.layers.batch_normalization( cnn, training = training )
         cnn = cnn + x # shortcut
-        return tf.nn.relu( cnn )
+        if nu is not None:
+            cnn = q.shaped_relu( cnn )
+        else:
+            cnn = tf.nn.relu( cnn )
+        return cnn
 
-def residual_stack( x, no_filt, training = False ):
+def residual_stack( x, no_filt, training = False, nu = None ):
+    filter_shape = [ 3, x.get_shape()[-1], no_filt ]
     with tf.variable_scope("res_stack_a"):
-        cnn = tf.layers.conv1d( x, no_filt, 1, padding = "same" )
+        conv_filter = tf.get_variable( "conv_filter", filter_shape )
+        if nu is not None:
+            conv_filter = q.trinarize( conv_filter, nu = nu  )
+        cnn = tf.nn.conv1d( x, conv_filter, 1, padding = "SAME" )
         cnn = tf.layers.batch_normalization( cnn, training = training )
     with tf.variable_scope("res_stack_b"):
-        cnn = residual_unit( cnn, training = training )
+        cnn = residual_unit( cnn, training = training, nu = nu )
     with tf.variable_scope("res_stack_c"):
-        cnn = residual_unit( cnn, training = training )
+        cnn = residual_unit( cnn, training = training, nu = nu )
     cnn = tf.layers.max_pooling1d( cnn, 2, 2 )
     return cnn
 
@@ -34,18 +53,19 @@ def get_net( x, training = False, use_SELU = False ):
     mean = tf.expand_dims( mean, 1 )
     mean = tf.tile( mean, [ 1, x.get_shape()[1], 1 ] )
     x = ( x - mean )
+    no_filt = 64
     with tf.variable_scope("block_1"):
-        cnn = residual_stack( x, 32, training = training )
+        cnn = residual_stack( x, no_filt, training = training, nu = 0.7 )
     with tf.variable_scope("block_2"):
-        cnn = residual_stack( cnn, 32, training = training )
+        cnn = residual_stack( cnn, no_filt, training = training, nu = 1.0 )
     with tf.variable_scope("block_3"):
-        cnn = residual_stack( cnn, 32, training = training )
+        cnn = residual_stack( cnn, no_filt, training = training, nu = 1.0 )
     with tf.variable_scope("block_4"):
-        cnn = residual_stack( cnn, 32, training = training )
+        cnn = residual_stack( cnn, no_filt, training = training, nu = 1.0 )
     with tf.variable_scope("block_5"):
-        cnn = residual_stack( cnn, 32, training = training )
+        cnn = residual_stack( cnn, no_filt, training = training, nu = 1.0 )
     with tf.variable_scope("block_6"):
-        cnn = residual_stack( cnn, 32, training = training )
+        cnn = residual_stack( cnn, no_filt, training = training, nu = 1.0 )
     cnn = tf.layers.flatten( cnn )
     if use_SELU:
         with tf.variable_scope("dense_1"):
@@ -59,14 +79,26 @@ def get_net( x, training = False, use_SELU = False ):
             dropped = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
             cnn = tf.where( training, dropped, cnn )
     else:
+        dense_1 = tf.get_variable( "dense_8", [ cnn.get_shape()[-1], 128 ], initializer = get_initializer() )
+        dense_2 = tf.get_variable( "dense_9", [ 128, 128 ], initializer = get_initializer() )
+        nu = 1.4
+        if nu is not None:
+            dense_1 = q.trinarize( dense_1, nu = nu )
+            dense_2 = q.trinarize( dense_2, nu = nu )
         with tf.variable_scope("dense_1"):
-            cnn = tf.layers.dense( cnn, 128 )
+            cnn = tf.matmul( cnn, dense_1 )
             cnn = tf.layers.batch_normalization( cnn, training = training )
-            cnn = tf.nn.relu( cnn )
+            if nu is None:
+                cnn = tf.nn.relu( cnn )
+            else:
+                cnn = q.shaped_relu( cnn )
         with tf.variable_scope("dense_2"):
-            cnn = tf.layers.dense( cnn, 128 )
+            cnn = tf.matmul( cnn, dense_2 )
             cnn = tf.layers.batch_normalization( cnn, training = training )
-            cnn = tf.nn.relu( cnn )
+            if nu is None:
+                cnn = tf.nn.relu( cnn )
+            else:
+                cnn = q.shaped_relu( cnn )
     with tf.variable_scope("dense_3"):
         pred = tf.layers.dense( cnn, 24 )
     return pred

@@ -10,6 +10,34 @@ import os
 import quantization as q
 from tensorflow.python import pywrap_tensorflow
 
+'''
+Classes:
+0) OOK,
+1) 4ASK,
+2) 8ASK,
+3) BPSK,
+4) QPSK,
+5) 8PSK,
+6) 16PSK,
+7) 32PSK,
+8) 16APSK,
+9) 32APSK,
+10) 64APSK,
+11) 128APSK,
+12) 16QAM,
+13) 32QAM,
+14) 64QAM,
+15) 128QAM,
+16) 256QAM,
+17) AM-SSB-WC,
+18) AM-SSB-SC,
+19) AM-DSB-WC,
+20) AM-DSB-SC,
+21) FM,
+22) GMSK,
+23) OQPSK
+'''
+
 NO_TEST_BATCHES = 154 # 410*24 / 64
 NO_TEST_EXAMPLES = NO_TEST_BATCHES * 64
 
@@ -28,17 +56,17 @@ def parse_example( ex ):
     return signal, tf.cast( label, tf.int32 ), snr
 
 def filter_snr( sig, label, snr ):
-    return tf.math.greater( snr, -12 )
+    return tf.math.greater( snr, 4 )
 
 def batcher( input_file, batch_size, training = True ):
     dset = tf.data.TFRecordDataset( [ input_file ] )
     dset = dset.map( parse_example )
-    if training:
-        dset = dset.shuffle( 8*batch_size )
-        dset = dset.repeat()
-        dset = dset.filter( filter_snr )
-    dset = dset.batch( batch_size )
     dset = dset.prefetch( buffer_size = 16*batch_size)
+    if training:
+        dset = dset.filter( filter_snr )
+        dset = dset.repeat()
+        dset = dset.shuffle( 8*batch_size )
+    dset = dset.batch( batch_size )
     if training:
         iterator = dset.make_initializable_iterator()
     else:
@@ -180,25 +208,10 @@ def teacher_student_opt( resnet_pred, quant_pred, label, learning_rate, quantize
         100000,
         0.96
     )
-    coll = tf.get_collection( "Weights" )
-    weight_relu = 0
-    for w in coll:
-        weight_relu = tf.reduce_sum( tf.nn.relu( tf.math.abs( w ) - 1.5 ) )
-    coll = tf.get_collection( "Quant_Errs" )
-    weight_reg = 0
-    for w in coll:
-        weight_reg += tf.reduce_sum( w )
-    coll = tf.get_collection( "Activations_opt" )
-    act_reg = 0
-    for w in coll:
-        act_reg += tf.reduce_sum( w )
-    total_loss = l2_loss + quant_err + weight_relu/100 + 5*weight_reg + act_reg/10000000000
+    total_loss = quant_err # + l2_loss
     tf.summary.scalar( "guidence_loss", tf.reduce_sum( l2_loss ) )
     tf.summary.scalar( "student_loss", tf.reduce_sum( quant_err ) )
     tf.summary.scalar( "teacher_loss", tf.reduce_sum( res_err ) )
-    tf.summary.scalar( "weight_reg", tf.reduce_sum( weight_reg ) )
-    tf.summary.scalar( "weight_relu", tf.reduce_sum( weight_relu ) )
-    tf.summary.scalar( "act_reg", tf.reduce_sum( act_reg ) )
     pred = tf.math.argmax( quant_pred, axis = 1 )
     correct = tf.cast( tf.math.equal( pred, tf.cast( label, tf.int64 ) ), tf.float32 )
     accr = tf.reduce_mean( correct )
@@ -272,7 +285,20 @@ def guided_train_loop( opt_A, opt_B, summary_writer, num_correct, training, no_s
     except KeyboardInterrupt:
         tf.logging.log( tf.logging.INFO, "Ctrl-c recieved, training stopped" )
     return
-    
+
+def print_conf_mat( preds, labels ):
+    classes = ['32PSK', '16APSK', '32QAM', 'FM', 'GMSK',
+               '32APSK', 'OQPSK', '8ASK', 'BPSK', '8PSK',
+               'AM-SSB-SC', '4ASK', '16PSK', '64APSK', '128QAM',
+               '128APSK', 'AM-DSB-SC', 'AM-SSB-WC', '64QAM', 'QPSK',
+               '256QAM', 'AM-DSB-WC', 'OOK', '16QAM']
+    print( "\t".join( [ "CM:" ] + classes ) )
+    conf_mat = [ [0]*24 for x in range(24) ]
+    for p, l in zip( preds, labels ):
+        conf_mat[int(p)][int(l)] += 1
+    for i, x in enumerate( conf_mat ):
+        print( classes[i] + "\t" + ",\t".join( [ str(y) for y in x ]) )
+
 if __name__ == "__main__":
     args = get_args()
     iterator = batcher( args.dataset, args.batch_size, not args.test )
@@ -328,8 +354,8 @@ if __name__ == "__main__":
     if res_only:
         reader = pywrap_tensorflow.NewCheckpointReader( args.model_name )
         var_to_shape_map = reader.get_variable_to_shape_map()
-        # tensors_to_load = set([ x for x in var_to_shape_map if "resnet" in x ])
-        tensors_to_load = set([ x for x in var_to_shape_map if "quant/lyr" not in x or "scaling/Adam" not in x ])
+        tensors_to_load = set([ x for x in var_to_shape_map if "resnet" in x ])
+        # tensors_to_load = set([ x for x in var_to_shape_map if "quant/lyr" not in x or "scaling/Adam" not in x ])
         nodes = {}
         grph = tf.get_default_graph()
         for n in grph.as_graph_def().node:

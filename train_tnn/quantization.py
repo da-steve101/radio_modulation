@@ -30,3 +30,30 @@ def quantize_activations( xr, k ):
     return stop_grad( xr, quant )
 
 
+def shaped_relu( x, a = 1.0 ):
+    # return tf.nn.relu( x )
+    b = 0.5 #( 1 - a )/ 2
+    act = tf.clip_by_value( a*x + b, 0, 1 )
+    quant = tf.round( act )
+    return act  + tf.stop_gradient( quant - act )
+
+def trinarize( x, nu = 1.0 ):
+    clip_val = tf.clip_by_value( x, -1, 1 )
+    x_shape = x.get_shape()
+    thres = nu * tf.reduce_mean(tf.abs(clip_val))
+    unmasked = tf.where(
+        tf.logical_and(
+            tf.greater( clip_val, -thres ),
+            tf.less( clip_val, thres )
+        ),
+        tf.constant( 0.0, shape = x_shape ),
+        clip_val )
+    eta = tf.reduce_mean( tf.abs( unmasked ) )
+    #unmasked = tf.multiply( unmasked, block_mask )
+    t_x = tf.where( tf.less_equal( unmasked, -thres ),
+                    tf.multiply( tf.constant( -1.0, shape = x_shape ), eta ),
+                    unmasked )
+    t_x = tf.where( tf.greater_equal( unmasked, thres ),
+                    tf.multiply( tf.constant( 1.0, shape = x_shape ), eta ),
+                    t_x )
+    return x + tf.stop_gradient( t_x - x )
