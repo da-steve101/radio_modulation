@@ -2,34 +2,44 @@
 
 module windower_tests
 #(
-   // supported combos are ( 3, X, X, 1, 1 ) and ( 2, X, X, 2, 0 ) where X is any > 0
-   parameter WINDOW_SIZE = 2, // only works for 3 and 2
-   parameter NO_CH = 10,
-   parameter LOG2_IMG_SIZE = 10,
-   parameter STRIDE = 2,
-   parameter ZERO_PADDING = 0, // width of zero padding used
-   parameter RUN_MODE = 1 // 0 = run continuously, X = run with a gap of ( 2^X - 1 ) cycles
+  parameter NO_CH = 8,
+  parameter LOG2_IMG_SIZE = 7,
+  parameter THROUGHPUT = 1,
+  parameter RUN_MODE = 5 // 0 = run continuously, X = run with a gap of ( 2^X - 1 ) cycles
 ) ();
+   parameter NO_MEM = 2*THROUGHPUT;
    reg clk;
    reg rst;
    reg vld_in;
-   reg [NO_CH-1:0] data_in;
+   reg [NO_CH-1:0] data_in [THROUGHPUT-1:0];
    wire 	   vld_out;
-   wire [NO_CH-1:0] data_out[WINDOW_SIZE-1:0];
+   wire [NO_CH-1:0] data_out [THROUGHPUT+1:0];
    reg [LOG2_IMG_SIZE:0] 	     cntr;
    reg [LOG2_IMG_SIZE-1:0] 	     out_cntr;
-   reg [NO_CH-1:0]  window_test[WINDOW_SIZE-1:0];
+   reg [NO_CH-1:0]  window_test[THROUGHPUT+1:0];
    reg [RUN_MODE:0] 		     wait_cnt;
    genvar 			     i;
 
+   generate
+      for ( i = 0; i < THROUGHPUT; i = i + 1 ) begin : data_in_update
+	 always @( posedge clk ) begin
+	    if ( rst ) begin
+	       data_in[i] <= THROUGHPUT - 1 - i;
+	    end else begin
+	       if ( vld_in ) begin
+		  data_in[i] <= data_in[i] + THROUGHPUT;
+	       end
+	    end
+	 end
+      end
+   endgenerate
    always @( posedge clk ) begin
       if ( rst ) begin
-	 data_in <= 0;
 	 vld_in <= 0;
 	 cntr <= 0;
 	 out_cntr <= 0;
       end else begin
-	 if ( cntr < 1024 ) begin
+	 if ( cntr < ( 1 << LOG2_IMG_SIZE ) ) begin
 	    cntr <= cntr + 1;
 	    vld_in <= 1;
 	    wait_cnt <= 0;
@@ -37,13 +47,10 @@ module windower_tests
 	    if ( RUN_MODE != 0 ) begin
 	       vld_in <= 0;
 	       wait_cnt <= wait_cnt + 1;
-	       if ( wait_cnt >= ( 1 << RUN_MODE ) - 1 ) begin
+	       if ( wait_cnt >= ( 1 << ( RUN_MODE - 1 ) ) - 1 ) begin
 		  cntr <= 0;
 	       end
 	    end
-	 end
-	 if ( vld_in ) begin
-	    data_in <= data_in + 1;
 	 end
 	 if ( vld_out ) begin
 	    out_cntr <= out_cntr + 1;
@@ -51,21 +58,23 @@ module windower_tests
       end
    end // always @ ( posedge clk )
    generate
-      for ( i = 0; i < WINDOW_SIZE; i = i + 1 ) begin:window_init
+      for ( i = 0; i < THROUGHPUT+2; i = i + 1 ) begin:window_init
 	 always @( posedge clk ) begin
 	    if ( rst ) begin
-	       window_test[i] <= WINDOW_SIZE - 1 - ZERO_PADDING - i;
+	       window_test[i] <= THROUGHPUT - i;
 	    end else begin
 	       if ( vld_out ) begin
-		  window_test[i] <= window_test[i] + STRIDE;
-		  if ( data_out[i] != window_test[i] ) begin
-		     if ( ( out_cntr == 0 | out_cntr == -1 ) & ZERO_PADDING ) begin
-			if ( data_out[i] != 0 ) begin
-			   $display("ASSERTION FAILED: data_out[", i ,"] = ", data_out[i], " and should be 0" );
-			end
-		     end else begin
-			$display("ASSERTION FAILED: data_out[", i , "] =", data_out[i], " and should be window_test[", i ,"] =", window_test[i]);
+		  window_test[i] <= window_test[i] + THROUGHPUT;
+		  if ( i == THROUGHPUT + 1 & out_cntr == 0 ) begin
+		     if ( data_out[i] != 0 ) begin
+			$display("ASSERTION FAILED: data_out[", out_cntr, ", ", i ,"] = ", data_out[i], " and should be 0 on leading padding" );
 		     end
+		  end else if ( i == 0 & out_cntr == ( 1 << LOG2_IMG_SIZE ) - 1 ) begin
+		     if ( data_out[i] != 0 ) begin
+			$display("ASSERTION FAILED: data_out[", out_cntr, ", ", i ,"] = ", data_out[i], " and should be 0 on trailing padding" );
+		     end
+		  end else if ( data_out[i] != window_test[i] ) begin
+		     $display("ASSERTION FAILED: data_out[", out_cntr, ", ", i , "] =", data_out[i], " and should be window_test[", i ,"] =", window_test[i]);
 		  end
 	       end
 	    end
@@ -75,11 +84,9 @@ module windower_tests
 
 
 windower #(
-	   .WINDOW_SIZE(WINDOW_SIZE),
 	   .NO_CH(NO_CH),
-	   .STRIDE( STRIDE ),
 	   .LOG2_IMG_SIZE(LOG2_IMG_SIZE),
-	   .ZERO_PADDING(ZERO_PADDING)
+	   .THROUGHPUT( THROUGHPUT )
 ) win_3_pad
 (
  .clk( clk ),
