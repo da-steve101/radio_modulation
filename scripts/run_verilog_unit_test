@@ -1,0 +1,126 @@
+#! /bin/bash
+
+POSITIONAL=()
+while [[ $# -gt 0 ]]
+do
+key="$1"
+
+case $key in
+    -p|--param_file)
+    PARAMFILE="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    -h|--help)
+    echo "run_unit_test.sh [ -p|--param_file param_file ] file1 file2 file3 ... "
+    echo "  -p|--param_file : a file containing parameters to pass in each test"
+    echo "                    has the format of:"
+    echo "                      PARAM1=VALUE1,PARAM2=VALUE2,PARAM3=VALUE3"
+    echo "                      PARAM1=VALUE4,PARAM2=VALUE5,PARAM3=VALUE6"
+    echo "                      PARAM1=VALUE7,PARAM2=VALUE8,PARAM3=VALUE9"
+    echo "                    where each line is a test to run"
+    exit 1
+    ;;
+    *)    # unknown option
+    POSITIONAL+=("$1") # save it in an array for later
+    shift # past argument
+    ;;
+esac
+done
+
+if [[ ${#POSITIONAL[@]} < 1 ]]; then
+  echo ERROR: at least 1 top level module file required as argument
+  exit 1
+fi
+
+ExecStep()
+{
+  echo running $@
+  "$@"
+  RETVAL=$?
+  if [ $RETVAL -ne 0 ]
+  then
+    echo -e  "\e[31mTEST FAILED\e[0m to run, check $tmp_dir for details"
+    exit $RETVAL
+  fi
+}
+
+tmp_dir=$(echo "unit_test_run_"$(date +%s))
+mkdir $tmp_dir
+cd $tmp_dir
+
+FILES=()
+for F in ${POSITIONAL[@]}; do
+    if [[ ${F} == /* ]];
+    then
+      FILES+=("${F}")
+    else
+      FILES+=("../${F}")
+    fi
+done
+all_files=$(echo "${FILES[@]}")
+echo using files $all_files
+topname=$( basename $FILES[0] | awk -F '.' '{ print $1 }' )
+echo top module is $topname
+
+echo """
+set curr_wave [current_wave_config]
+if { [string length \$curr_wave] == 0 } {
+  if { [llength [get_objects]] > 0} {
+    add_wave /
+    set_property needs_save false [current_wave_config]
+  } else {
+     send_msg_id Add_Wave-1 WARNING "No top level signals found. Simulator will start without a wave window. If you want to open a wave window go to 'File->New Waveform Configuration' or type 'create_wave_config' in the TCL console."
+  }
+}
+
+run 2300ns
+quit
+""" > $topname.tcl
+
+
+param_file_rows=","
+if [ ! -z ${PARAMFILE+x} ]
+then
+  if [[ ! $PARAMFILE == /* ]]
+  then
+    PARAMFILE=../$PARAMFILE
+  fi
+  param_file_rows=$(cat $PARAMFILE)
+fi
+
+echo param_file_rows = $param_file_rows
+
+for p in $param_file_rows
+do
+  i=1
+  param_str="";
+  while true
+   do
+   param=$(echo $p | awk -F ',' '{ print $'$i' }')
+   param_tmp=$(echo -generic_top $param)
+   i=$((i+1))
+   if [[ -z $param ]]
+   then
+     break
+   fi
+   param_str=$( echo $param_str $param_tmp )
+  done
+
+  echo running with params $param_str
+
+  ExecStep /opt/Xilinx/Vivado/2018.1/bin/xvlog --incr --relax -L xil_defaultlib --sv $all_files 2>&1 | tee compile.log
+  ExecStep /opt/Xilinx/Vivado/2018.1/bin/xelab $param_str -wto 1ec86628b05f4fe1a733840854498458 --incr --debug typical --relax --mt 8 -L xil_defaultlib -L unisims_ver -L unimacro_ver -L secureip -L xpm --snapshot $topname"_behav" $topname  -log elaborate.log
+  ExecStep /opt/Xilinx/Vivado/2018.1/bin/xsim $topname"_behav" -key {Behavioral:sim_1:Functional:$topname} -tclbatch $topname.tcl -log simulate.log
+  if grep -q "ASSERTION FAILED" simulate.log; then
+    echo -e "\e[31mTEST FAILED: check simulate.log\e[0m"
+    exit 1
+  fi
+  echo -e "\e[32mTEST PASSED\e[0m"
+
+done
+
+cd ..
+rm -rf $tmp_dir
+
+echo -e "\e[32mALL TESTS PASSED\e[0m"
