@@ -1,0 +1,85 @@
+`timescale 1ns / 1ps
+
+module conv_lyr1_test
+#(
+) ();
+
+   reg clk;
+   reg rst;
+   reg vld_in;
+   reg [1:0][7:0] data_in [1:0];
+   wire 	  vld_out;
+   wire [255:0]   data_out [0:0];
+   reg [3:0] 	  out_cntr;
+
+   /*
+    python code:
+def ary_to_hex( x ):
+  hex_str = ""
+  for i in range( int( len(x) / 4 ) ):
+    total = 0
+    for j in range( 4 ):
+      total += x[4*i + j] << ( 3 - j )
+    hex_str += hex( total )[-1]
+  return hex_str
+
+# input_arys = [ np.array( [ i + 4, 0, i + 3, 0, i + 2, 0 ] ) for i in range( 32 ) ]
+input_arys = [ np.array( [ 0, i + 2, 0, i + 3, 0, i + 4 ] ) for i in range( 32 ) ]
+input_arys[0][1] = 0
+res = [ list( reversed( 1*(np.matmul( w, lyr1_w ) >= lyr1_c) ) )  for w in input_arys ]
+mp_res = [ [ a | b for a, b in zip( res[2*j], res[2*j+1] ) ] for j in range(16) ]
+mp_hex = [ "256'h" + ary_to_hex( x ) for x in mp_res ]
+", ".join( mp_hex )
+   */
+   /*
+   wire [255:0]   expected_out [16] = { 256'hc9c8183080801112a6db002500c49da6108c10050bc024368dd401400a11136e, 256'hc9c8183080801116a49b202520c49da6108c100509c024368dd401480a11136e, 256'hc9c8183080801116a40b242520c49da6108c100509c02436add401488a11136e, 256'hc9c8183080801116a50b642520c49ca61088100501802432add0010886111b6e, 256'hc9d8183084901116a50a640520c49ca610891005018024b2add0010886101b6e, 256'hc9d8183084901116850a640520449ca610891005018024b2add0011886101b6e, 256'hc9d8183084901116850a640520449c261089500111802692add0011896101b6e, 256'hc9d818388cb01116850a64052044dc2612894001119026d2add0011896103b6e, 256'hc9d8183a8cb01116850a64052144dc2412994001119426d2add0411c96123b6e, 256'hc9d8183a8cb01117c50a64052144dc24129b4081119426d2add0411c96923b6e, 256'hc9d8183a8cb01137c50a64052144dc24129b408111b426d2add0411cd6923b6e, 256'hc9d9183eccb81137c50a64052144de24129b408115b426d3add2511cd6923b6e, 256'hc9d9593eccb81537c50a64052144de24129b408115b626d3add2511cd6923b6e, 256'hc9d9593eccb81537c50a64052144de24129b408115b626d3add2511cd6923b6e, 256'hc9d9593eccb81537c50a64052144de24129b408115b626d3add2511cd6923b6e, 256'hc9d9593edcb815b5c50a64052144de24129b408115b626d3add2511cd69a3b6e };
+    */
+   wire [255:0]   expected_out [16] = { 256'h7640885406802bb16ca403d0a808310865a923002408db654888010108141699, 256'h7640885406802bb16c2403d0aa08310875a923002408d9654888010108541699, 256'h7640885406802bb16c2403d0aa08310c75a923002408d92548880101085c1699, 256'h7640885406802bb16c2403d0aa08310c75a923002408d92548880101085c1699, 256'h7640885406802bb16c240390aa08310c75a923002408d92548880101085c1699, 256'h7642885406002bb16c240390aa08310c75a923002408d92548880101085c1699, 256'h7642885416002bb16c240390aa08310c75a923002400d92548880101085c1699, 256'h7642885416002bb16c240390aa08310c75a923002400d92548880101085c1699, 256'h7642885416002bb16c240390aa08310c75a923002400d92548880101085c1699, 256'h7642885416002bb16c240390aa08310c75a923002400d92548880101085c1689, 256'h7642885416002bb02c240390aa08310c75a963002400d92548880101085c1689, 256'h7642885416002bb02c240390aa08310c75a963002400d92548880101085c1689, 256'h7642885416002bb02c240390aa08310c75a963002400d92548880101085c1689, 256'h7642885416002bb02c240390aa08310c75a973002400d92548880101085c1689, 256'h7642885516002bb02c240390aa08310475a973002400c92548880101085c1689, 256'h7642881516002bb03c240390aa28310455a973002400c92548888101085c1689 };
+
+always @( posedge clk ) begin
+   if ( rst ) begin
+      data_in[0] <= 16'h002;
+      data_in[1] <= 16'h001;
+      vld_in <= 0;
+      out_cntr <= 0;
+   end else begin
+      vld_in <= 1;
+      data_in[0] <= data_in[0] + 2;
+      data_in[1] <= data_in[1] + 2;
+      if ( vld_out ) begin
+	 out_cntr <= out_cntr + 1;
+	 if ( data_out[0] != expected_out[out_cntr] ) begin
+	    $display( "ASSERTION FAILED: data_out = %h, expected_out = %h", data_out[0], expected_out[out_cntr] );
+	 end
+	 if ( out_cntr == 15 ) begin
+	    $finish;
+	 end
+      end
+   end
+end
+
+lyr1 lyr1_inst
+(
+.clk(clk),
+.rst(rst),
+.vld_in(vld_in),
+.data_in(data_in),
+.vld_out(vld_out),
+.data_out(data_out)
+);
+
+initial begin
+   clk = 1;
+   rst = 1;
+   #10;
+   rst = 0;
+   #50;
+   $finish;
+end
+
+always begin
+   #1;
+   clk = !clk;
+end
+
+endmodule

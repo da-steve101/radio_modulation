@@ -5,7 +5,7 @@ module windower_tests
   parameter NO_CH = 8,
   parameter LOG2_IMG_SIZE = 7,
   parameter THROUGHPUT = 1,
-  parameter RUN_MODE = 5 // 0 = run continuously, X = run with a gap of ( 2^X - 1 ) cycles
+  parameter RUN_MODE = 1 // 0 = run continuously, X = run with a gap of ( 2^X - 1 ) cycles
 ) ();
    parameter NO_MEM = 2*THROUGHPUT;
    reg clk;

@@ -334,7 +334,7 @@ if __name__ == "__main__":
             # with tf.variable_scope( "full" ):
             #    full_prec_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU )
             with tf.variable_scope( "quant" ):
-                quant_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU, quantize_w = quantize_w, quantize_act = quantize_act )
+                quant_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU, low_prec = not args.use_SELU )
             pred = quant_pred
         else:
             pred = resnet.get_net( signal, training = training, use_SELU = args.use_SELU )

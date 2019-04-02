@@ -202,28 +202,31 @@ def subexpression_elimination( matrix ):
     pattern_pos = []
     pattern_neg = []
     # orig_mat = matrix.copy()
-    while most_common_count > 1:
-        pattern_matrix = get_pattern_mat( matrix, pattern_matrix, update_idxs, rm_idxs )
-        if most_common_count > 2 or len(pattern_pos) + len(pattern_neg) > 2:
-            most_common_count, common_idxs = get_common_idx( pattern_matrix )
-            pattern, pattern_pos, pattern_neg = find_most_common( matrix, common_idxs )
-            rm_idxs = find_finished_idxs( pattern_matrix )
-            matrix, return_mat = update_matrix( matrix, pattern_pos, pattern_neg, pattern, rm_idxs )
-            finished_rows = return_mat + finished_rows
-            ''' verify result
-            new_mat = matrix.copy()
-            for x, i in finished_rows:
-                tmp = np.concatenate( ( np.array( x, dtype=np.int16 ),  np.zeros( ( new_mat.shape[1] - len(x) ), dtype = np.int16 ) ) )
-                new_mat = np.vstack( [ new_mat[:i,:], tmp, new_mat[i:,:] ] )
-            assert reverse_check_result( orig_mat, new_mat ), "must have same matrix originally"
-            '''
-            update_idxs = pattern_pos + pattern_neg + [matrix.shape[0] + len(return_mat) - 1]
-            print( str(len(pattern_pos) + len(pattern_neg)) +
-                   " expressions have a common subexpression of size "
-                   + str(most_common_count) + " to be eliminated"  )
-        else:
-            rm_idxs = []
-            most_common_count, matrix, update_idxs = fast_update_pat_2_join( matrix, pattern_matrix )
+    try:
+        while most_common_count > 1:
+            pattern_matrix = get_pattern_mat( matrix, pattern_matrix, update_idxs, rm_idxs )
+            if most_common_count > 2 or len(pattern_pos) + len(pattern_neg) > 2:
+                most_common_count, common_idxs = get_common_idx( pattern_matrix )
+                pattern, pattern_pos, pattern_neg = find_most_common( matrix, common_idxs )
+                rm_idxs = find_finished_idxs( pattern_matrix )
+                matrix, return_mat = update_matrix( matrix, pattern_pos, pattern_neg, pattern, rm_idxs )
+                finished_rows = return_mat + finished_rows
+                ''' verify result
+                new_mat = matrix.copy()
+                for x, i in finished_rows:
+                  tmp = np.concatenate( ( np.array( x, dtype=np.int16 ),  np.zeros( ( new_mat.shape[1] - len(x) ), dtype = np.int16 ) ) )
+                  new_mat = np.vstack( [ new_mat[:i,:], tmp, new_mat[i:,:] ] )
+                assert reverse_check_result( orig_mat, new_mat ), "must have same matrix originally"
+                '''
+                update_idxs = pattern_pos + pattern_neg + [matrix.shape[0] + len(return_mat) - 1]
+                print( str(len(pattern_pos) + len(pattern_neg)) +
+                       " expressions have a common subexpression of size "
+                       + str(most_common_count) + " to be eliminated"  )
+            else:
+                rm_idxs = []
+                most_common_count, matrix, update_idxs = fast_update_pat_2_join( matrix, pattern_matrix )
+    except KeyboardInterrupt:
+        print( "Interrupted: finalizing tree at current level of simplification" )
     for x, i in finished_rows:
         tmp = np.concatenate( ( np.array( x, dtype=np.int16 ),  np.zeros( ( matrix.shape[1] - len(x) ), dtype = np.int16 ) ) )
         matrix = np.vstack( [ matrix[:i,:], tmp, matrix[i:,:] ] )

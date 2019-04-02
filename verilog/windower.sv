@@ -16,9 +16,6 @@ module windower
    output 	      vld_out,
    output [NO_CH-1:0] data_out [THROUGHPUT+1:0]
 );
-   parameter WINDOW_SIZE = 3; // only used with 3
-   parameter ZERO_PADDING = 1; // amount of zero padding, always use 1
-   parameter STRIDE = 1; // always use stride of 1
    // throughput = 1 => 3, 3
    // throughput = 2 => 5, 4
    // throughput = 4 => 9, 6
@@ -33,7 +30,8 @@ module windower
    wire 			       is_last;
    wire 			       is_first;
    wire [NO_CH-1:0] 		       pad_first [THROUGHPUT+1:0];
-   wire [NO_CH-1:0] 		       pad_last [THROUGHPUT+1:0];   
+   wire [NO_CH-1:0] 		       pad_last [THROUGHPUT+1:0];
+   wire [NO_CH-1:0]                    no_padding [THROUGHPUT+1:0];
    wire [NO_CH-1:0] 		       zero;
    assign zero = 0;
    assign cntr_nxt = cntr + 1;
@@ -41,10 +39,11 @@ module windower
    assign is_last = ( cntr_nxt == 0 );
    assign is_first = ( cntr == 0 );
    // implement padding
-   assign pad_first = { zero, window_mem[NO_MEM-1:NO_MEM-1-THROUGHPUT] };
+   assign pad_first = { zero, window_mem[NO_MEM-1:THROUGHPUT-1] };
    assign pad_last = { window_mem[NO_MEM:THROUGHPUT], zero };
-   assign data_out = is_first ? pad_first : ( is_last ? pad_last : window_mem[NO_MEM:THROUGHPUT-1] );
-   assign vld_out = running | ( cntr != 0 );
+   assign no_padding = window_mem[NO_MEM:THROUGHPUT-1];
+   assign data_out = is_first ? pad_first : ( is_last ? pad_last : no_padding );
+   assign vld_out = running;
    always @( posedge clk )
    begin
       window_mem[THROUGHPUT-1:0] <= data_in[THROUGHPUT-1:0];
@@ -58,12 +57,15 @@ module windower
       else begin
 	 if ( running ) begin
 	    cntr <= cntr_nxt;
-	    if ( cntr_filled == 0 & !vld_in ) begin
+	    if ( cntr_nxt == 0 & ( !vld_in || ( img_fill < 2 )) ) begin
 	       // this image has finished and the next one isn't ready
-	       img_fill <= img_fill - 1;
 	       running <= 0;
 	    end
+	    if ( ( cntr_nxt == 0 | cntr_filled == 0 ) & !vld_in ) begin
+	       img_fill <= img_fill - 1;
+	    end
 	 end else begin // if not running
+	    cntr <= 0;
 	    if ( vld_in ) begin
 	       img_fill <= img_fill + 1;
 	       if ( img_fill > 0 ) begin
@@ -71,7 +73,6 @@ module windower
 	       end
 	    end else begin
 	       img_fill <= 0;
-	       cntr <= 0;
 	    end
 	 end
       end
