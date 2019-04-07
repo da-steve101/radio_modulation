@@ -396,7 +396,7 @@ def compute_op( a, b, c, op_code ):
     return a + b + c
 
 def verify_tree( fname ):
-    matrix, no_in, no_out, initial_no_adds = get_matrix( fname + "_weights.csv" )
+    matrix, no_in, no_out, initial_no_adds = get_matrix( fname + ".csv" )
     f_t = open( fname + "_tern_op_list.csv" )
     rdr = csv.reader( f_t )
     ops = [ [ int(y) for y in x ] for x in rdr ]

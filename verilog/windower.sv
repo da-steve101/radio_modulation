@@ -13,8 +13,8 @@ module windower
    input 	      rst,
    input 	      vld_in,
    input [NO_CH-1:0]  data_in [THROUGHPUT-1:0],
-   output 	      vld_out,
-   output [NO_CH-1:0] data_out [THROUGHPUT+1:0]
+   output logic	      vld_out,
+   output logic [NO_CH-1:0] data_out [THROUGHPUT+1:0]
 );
    // throughput = 1 => 3, 3
    // throughput = 2 => 5, 4
@@ -42,37 +42,44 @@ module windower
    assign pad_first = { zero, window_mem[NO_MEM-1:THROUGHPUT-1] };
    assign pad_last = { window_mem[NO_MEM:THROUGHPUT], zero };
    assign no_padding = window_mem[NO_MEM:THROUGHPUT-1];
-   assign data_out = is_first ? pad_first : ( is_last ? pad_last : no_padding );
-   assign vld_out = running;
    always @( posedge clk )
    begin
-      window_mem[THROUGHPUT-1:0] <= data_in[THROUGHPUT-1:0];
-      window_mem[NO_MEM:THROUGHPUT] <= window_mem[NO_MEM-THROUGHPUT:0];
+      if ( vld_in || ( ( cntr_nxt == 0 | cntr_filled == 0 ) & !vld_in ) ) begin
+	 window_mem[THROUGHPUT-1:0] <= data_in[THROUGHPUT-1:0];
+	 window_mem[NO_MEM:THROUGHPUT] <= window_mem[NO_MEM-THROUGHPUT:0];
+	 data_out <= is_first ? pad_first : ( is_last ? pad_last : no_padding );
+      end
       if ( rst )
       begin
 	 cntr <= 0;
 	 img_fill <= 0;
 	 running <= 0;
+	 vld_out <= 0;
       end
       else begin
 	 if ( running ) begin
-	    cntr <= cntr_nxt;
+	    if ( vld_in ) begin
+	       cntr <= cntr_nxt;
+	    end
 	    if ( cntr_nxt == 0 & ( !vld_in || ( img_fill < 2 )) ) begin
 	       // this image has finished and the next one isn't ready
 	       running <= 0;
 	    end
 	    if ( ( cntr_nxt == 0 | cntr_filled == 0 ) & !vld_in ) begin
 	       img_fill <= img_fill - 1;
+	       cntr <= cntr_nxt;
+	       vld_out <= 1;
+	    end else begin
+	       vld_out <= vld_in;
 	    end
 	 end else begin // if not running
+	    vld_out <= 0;
 	    cntr <= 0;
 	    if ( vld_in ) begin
 	       img_fill <= img_fill + 1;
 	       if ( img_fill > 0 ) begin
 		  running <= 1;
 	       end
-	    end else begin
-	       img_fill <= 0;
 	    end
 	 end
       end

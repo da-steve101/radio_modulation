@@ -164,6 +164,8 @@ def get_args():
                          help = "Quantize Activations" )
     parser.add_argument( "--learning_rate", type=float, default = 0.001,
                          help = "The learning rate to use when training" )
+    parser.add_argument( "--nu", type=float, default = 1.0,
+                         help = "The parameter to use when trinarizing" )
     parser.add_argument( "--use_SELU", action="store_true",
                          help = "Use Self-Normalizing networks" )
     return parser.parse_args()
@@ -334,7 +336,7 @@ if __name__ == "__main__":
             # with tf.variable_scope( "full" ):
             #    full_prec_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU )
             with tf.variable_scope( "quant" ):
-                quant_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU, low_prec = not args.use_SELU )
+                quant_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU, low_prec = not args.use_SELU, nu = args.nu )
             pred = quant_pred
         else:
             pred = resnet.get_net( signal, training = training, use_SELU = args.use_SELU )

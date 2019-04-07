@@ -79,6 +79,34 @@ def load_conv2_from_csv():
     c_vec = rd_file( "vgg_c_vec_lyr_2.csv" )
     return inputs, exp_outputs, weights, c_vec
 
+def ary_to_hex( x ):
+  hex_str = ""
+  for i in range( int( len(x) / 4 ) ):
+    total = 0
+    for j in range( 4 ):
+      total += x[4*i + j] << ( 3 - j )
+    hex_str += hex( total )[-1]
+  return hex_str
+
+def hex_to_ary( x ):
+  all_bin = []
+  for c in x:
+    for b in format( int( c, 16 ), '004b' ):
+      all_bin += [ int(b) ]
+  return np.array( all_bin )
+
+def hex_or( a, b ):
+  hex_str = ""
+  for x, y in zip( a, b ):
+    hex_str += hex( int( x, 16 ) | int( y, 16 ) )[-1]
+  return hex_str
+
+def hex_xor( a, b ):
+  hex_str = ""
+  for x, y in zip( a, b ):
+   hex_str += hex( int( x, 16 ) ^ int( y, 16 ) )[-1]
+  return hex_str
+
 def compute_whole_network( test_data, test_label, test_snr, bits_prec = 6 ):
     test_data = np.reshape( test_data, [ 1024, 2 ] )
     mean = np.mean( test_data, axis = 0 )

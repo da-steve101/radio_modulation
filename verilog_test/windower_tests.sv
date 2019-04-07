@@ -40,8 +40,12 @@ module windower_tests
 	 out_cntr <= 0;
       end else begin
 	 if ( cntr < ( 1 << LOG2_IMG_SIZE ) ) begin
-	    cntr <= cntr + 1;
-	    vld_in <= 1;
+	    if ( $urandom(2) ) begin
+	       cntr <= cntr + 1;
+	       vld_in <= 1;
+	    end else begin
+	       vld_in <= 0;
+	    end
 	    wait_cnt <= 0;
 	 end else begin
 	    if ( RUN_MODE != 0 ) begin
@@ -67,14 +71,14 @@ module windower_tests
 		  window_test[i] <= window_test[i] + THROUGHPUT;
 		  if ( i == THROUGHPUT + 1 & out_cntr == 0 ) begin
 		     if ( data_out[i] != 0 ) begin
-			$display("ASSERTION FAILED: data_out[", out_cntr, ", ", i ,"] = ", data_out[i], " and should be 0 on leading padding" );
+			$display("ASSERTION FAILED: data_out[%d, %d] = %h and should be 0 on leading padding", out_cntr, i, data_out[i] );
 		     end
 		  end else if ( i == 0 & out_cntr == ( 1 << LOG2_IMG_SIZE ) - 1 ) begin
 		     if ( data_out[i] != 0 ) begin
-			$display("ASSERTION FAILED: data_out[", out_cntr, ", ", i ,"] = ", data_out[i], " and should be 0 on trailing padding" );
+			$display("ASSERTION FAILED: data_out[%d, %d] = %h and should be 0 on trailing padding", out_cntr, i, data_out[i] );
 		     end
 		  end else if ( data_out[i] != window_test[i] ) begin
-		     $display("ASSERTION FAILED: data_out[", out_cntr, ", ", i , "] =", data_out[i], " and should be window_test[", i ,"] =", window_test[i]);
+		     $display("ASSERTION FAILED: data_out[%d, %d] = %h and should be window_test[%d] = %h on leading padding", out_cntr, i, data_out[i], i, window_test[i] );
 		  end
 	       end
 	    end

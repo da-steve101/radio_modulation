@@ -61,15 +61,15 @@ def compute_conv( input_bw, ops, output_idxs, c_vec, get_name, out_name ):
             in_name_A = get_name( op[1], no_inputs )
             in_bw = total_bits[ op[1] ]
             total_bits[ op[0] ] = in_bw
-            declarations += "reg [" + str( in_bw - 1 ) + ":0] " + op_name  + ";\n"
+            declarations += "reg signed [" + str( in_bw - 1 ) + ":0] " + op_name  + ";\n"
             computations += op_name + " <= "
             if ( op_code >> 2 ) % 2 == 0:
                 computations += "- "
             computations += in_name_A + ";\n"
         else:
-            total_bits[ op[0] ] = max( [ total_bits[ op_i ] for op_i in op[1:4] ] ) + 1
+            total_bits[ op[0] ] = max( [ total_bits[ op_i ] for op_i in op[1:4] ] ) + 2
             in_bw = total_bits[ op[0] ]
-            declarations += "reg [" + str( in_bw - 1 ) + ":0] " + op_name + ";\n"
+            declarations += "reg signed [" + str( in_bw - 1 ) + ":0] " + op_name + ";\n"
             sign = ""
             computations += op_name + " <= "
             for i in range( no_ops ):
@@ -129,8 +129,8 @@ def make_conv_mp( pixels_per_cycle, input_bw, ops, output_idxs, c_vec ):
         out_name = "lyr1_" + str(i) + "_output"
         module_body += compute_conv( input_bw, ops, output_idxs, c_vec, get_name, out_name )
     # do the max pooling
-    declarations = "reg [" + str(reg_depth - 1) + ":0] vld_sr;\n"
-    declarations += "assign vld_out = vld_sr[" + str( reg_depth - 1) + "];\n"
+    declarations = "reg [" + str(reg_depth) + ":0] vld_sr;\n"
+    declarations += "assign vld_out = vld_sr[" + str( reg_depth ) + "];\n"
     computations = ""
     for i in range( int( pixels_per_cycle / 2 ) ):
         declarations += "reg [" + str( len(output_idxs) - 1 ) + ":0] mp_" + str(i) + ";\n"
@@ -139,7 +139,7 @@ def make_conv_mp( pixels_per_cycle, input_bw, ops, output_idxs, c_vec ):
     module_body += "always @( posedge clk ) begin\n"
     # note: if throughput is less than 2 this is going to break
     module_body += "if ( rst ) begin \nvld_sr <= 0;\nend else begin\n"
-    module_body += "vld_sr <= { vld_sr[" + str(reg_depth - 2) + ":0], vld_in };\n"
+    module_body += "vld_sr <= { vld_sr[" + str(reg_depth - 1) + ":0], vld_in };\n"
     module_body += "end\n"
     module_body += computations
     module_body += "end\n"

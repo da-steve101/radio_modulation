@@ -48,96 +48,50 @@ def generate_bitcount_tree( prefix, bitwidth ):
         all_ones = ( all_ones & pattern ) + ( ( all_ones >> ( 1 << lyr ) ) & pattern )
         bitwidth = len(bin(all_ones)) - 2
         # dont need the giant carry chains: find a way to partiion into good blocks for FPGA
-        declare += "wire [" + str(bitwidth - 1 ) + ":0] " + prefix + str(lyr + 1) + ";\n"
+        declare += "wire signed [" + str(bitwidth - 1 ) + ":0] " + prefix + str(lyr + 1) + ";\n"
         declare += "assign " + prefix + str(lyr + 1) + " = "
         declare += "( " + prefix + str(lyr) + " & " + str( pattern ) + " ) + ("
         declare += "( " + prefix + str(lyr) + " >> " + str( 1 << lyr ) + ") & " + str( pattern ) + " );\n"
     assert all_ones == orig_bw, "should compute max bit count correctly: " + str( orig_bw ) + " != " + str( all_ones )
-    declare += "wire [" + str(bitwidth-1) + ":0] " + prefix + "res;\n"
+    declare += "wire signed [" + str(bitwidth-1) + ":0] " + prefix + "res;\n"
     declare += "assign " + prefix + "res = " + prefix + str(no_lyrs) + ";\n"
     return declare, bitwidth
 
 def make_module_header( no_out, pixels_per_cycle, img_size, mod_name ):
-    assert no_out == 256, "Currently can only be used with 256"
     module_header = """
 module """ + mod_name + """ (
 input clk,
 input rst,
 input vld_in,
 input ["""
-    input_bw = max( [ ( pixels_per_cycle * 256 ), 256 ] )
+    input_bw = max( [ ( pixels_per_cycle * no_out ), no_out ] )
     module_header += str( input_bw - 1 ) + ":0] data_in,\n"
     module_header += "output logic vld_out,\n"
     module_header += "output [" + str( no_out - 1) + ":0] data_out\n);\n"
     module_header += "wire [" + str( input_bw - 1 ) + ":0] window_in_data;\n"
     module_header += "wire window_in_vld;\n"
-    if pixels_per_cycle < 1:
-        # TODO: add a FIFO or some buffer here
-        cycles_per_pixel = int( 1 / pixels_per_cycle )
-        cntr_bits = math.log2( img_size )
-        start_threshold = int( math.ceil( cycles_per_pixel * img_size / ( cycles_per_pixel + 1 ) ) )
-        module_header += """
-reg [""" + str( cntr_bits + 1 ) + """:0] in_cntr;
-reg [""" + str( cntr_bits - 1 ) + """:0] out_cntr;
-reg rd_img;
-reg start;
-wire fifo_vld;
-always @( posedge clk ) begin
-if ( rst ) begin
-  in_cntr <= 0;
-  out_cntr <= 0;
-  rd_img <= 0;
-  start <= 0;
-end else begin
-  if ( vld_in ) begin
-    in_cntr <= in_cntr + 1;
-  end else if ( in_cntr >= """ + str( start_threshold ) + """ & out_cntr == 0 ) begin
-    out_cntr <= 1;
-    rd_img <= 1;
-    in_cntr <= in_cntr - start_threshold;
-  end else if ( out_cntr == 0 ) begin
-    rd_img <= 0;
-  end
-  if ( out_cntr != 0 ) begin
-    out_cntr <= out_cntr + 1;
-  end
-end
-end
-fifo_256 (
-.clk(clk),
-.srst( rst ),
-.din( data_in ),
-.wr_en( vld_in ),
-.rd_en( rd_img ),
-.dout( window_in_data ),
-.valid( fifo_vld )
-);
-assign window_in_vld = fifo_vld & rd_img;
-"""
-        pixels_per_cycle = 1
-    else:
-        module_header += "assign window_in_data = data_in;\n"
-        module_header += "assign window_in_vld = vld_in;\n"
+    module_header += "assign window_in_data = data_in;\n"
+    module_header += "assign window_in_vld = vld_in;\n"
     module_header += """
-wire [255:0] pixel_in [""" + str( pixels_per_cycle - 1 ) + """:0];
-wire [255:0] window_out_raw [""" + str( pixels_per_cycle + 1 ) + """:0];
-wire [""" + str( (pixels_per_cycle + 2)*256 - 1 ) + """:0] window_out_data;
+wire [""" + str( no_out - 1 ) + """:0] pixel_in [""" + str( pixels_per_cycle - 1 ) + """:0];
+wire [""" + str( no_out - 1 ) + """:0] window_out_raw [""" + str( pixels_per_cycle + 1 ) + """:0];
+wire [""" + str( (pixels_per_cycle + 2)*no_out - 1 ) + """:0] window_out_data;
 wire window_out_vld;
 """
     # assign packed to unpacked etc
     for i in range( pixels_per_cycle + 2 ):
-        t_low = i*256
-        t_high = 256*(i+1) - 1
+        t_low = i*no_out
+        t_high = no_out*(i+1) - 1
         if i < pixels_per_cycle:
             module_header += "assign pixel_in[" + str(i) + "] = window_in_data[" + str( t_high  ) + ":" + str( t_low ) + "];\n"
         module_header += "assign window_out_data[" + str( t_high ) + ":" + str( t_low ) + "] = window_out_raw[" + str(i) + "];\n"
     module_header += """
 windower
 #(
-  .NO_CH(256),
-  .LOG2_IMG_SIZE(""" + str( img_size ) + """),
+  .NO_CH(""" + str( no_out ) + """),
+  .LOG2_IMG_SIZE(""" + str( int( math.log2( img_size ) ) ) + """),
   .THROUGHPUT(""" + str( pixels_per_cycle ) + """)
-) lyr1_window (
+) lyr_window (
    .clk(clk),
    .rst(rst),
    .vld_in( window_in_vld ),
@@ -199,7 +153,7 @@ def generate_module_add_all( adder_ops, output_idxs, no_inputs, c_vec ):
             n_used += total_needed[op[2]][op[3] % 2]
         total_needed[op[0]] = ( p_used, n_used )
         no_bits = get_no_bits_needed( p_used, n_used )
-        add_op = "wire [" + str( no_bits - 1 ) + ":0] tmp_" + str(op[0]) + ";\n"
+        add_op = "wire signed [" + str( no_bits - 1 ) + ":0] tmp_" + str(op[0]) + ";\n"
         op_a = "" if op[3] >= 2 else "- "
         op_b = "+" if op[3] % 2 == 1 else "-"
         add_op += "assign tmp_" + str(op[0]) + " = " + op_a + " $signed(" + get_name( op[1], no_inputs ) + ") "
@@ -283,7 +237,7 @@ def generate_simple_tree( adder_ops, output_idxs, no_inputs, c_vec, prefix, get_
     module_header = declarations
     module_header += computations
     agg_name = prefix + "output_idxs"
-    module_header += "reg [" + str( len( output_idxs ) - 1 ) + ":0] " + agg_name + ";\n"
+    module_header += "reg signed [" + str( len( output_idxs ) - 1 ) + ":0] " + agg_name + ";\n"
     computations = "always @(posedge clk) begin\n"
     max_depth = max( [ depth_tracker[o] for o in output_idxs ] )
     for i, idx in enumerate( output_idxs ):
@@ -294,7 +248,7 @@ def generate_simple_tree( adder_ops, output_idxs, no_inputs, c_vec, prefix, get_
         dly = max_depth - depth_tracker[o]
         if dly > 0:
             reg_name = agg_name + "_delay_" + str( o )
-            module_header += "reg [" + str( dly - 1 ) + ":0] " + reg_name + ";\n"
+            module_header += "reg signed [" + str( dly - 1 ) + ":0] " + reg_name + ";\n"
             module_header += "assign " + agg_name + "_final[" + str( len(output_idxs) - i - 1 ) + "] = " + reg_name + "[" + str( dly - 1 ) + "];\n"
             if dly > 1:
                 computations += reg_name + " <= {" + reg_name + "[" + str(dly - 2) + ":0], " + agg_name + "[" + str(i) + "] };\n"
@@ -310,7 +264,7 @@ def generate_layer_module( pixels_per_cycle, adder_ops, output_idxs, no_inputs, 
     module_body = ""
     for i in range( int(math.ceil( pixels_per_cycle )) ):
         prefix_tmp = prefix + str(i) + "_"
-        get_name_pad = get_name_func( prefix_tmp, 256*i )
+        get_name_pad = get_name_func( prefix_tmp, len(output_idxs)*i )
         module_txt, max_depth = generate_simple_tree( adder_ops, output_idxs, no_inputs, c_vec, prefix_tmp, get_name_pad )
         module_body += module_txt
     # set up the valid sr
@@ -333,11 +287,11 @@ end
         for i in range( int( pixels_per_cycle / 2 ) ):
             mp_a = prefix + str(2*i) + "_output_idxs_final"
             mp_b = prefix + str(2*i + 1) + "_output_idxs_final"
-            module_body += "assign data_out[" + str(256*(i+1)-1) + ":" + str(256*i) + "] = " + mp_a + " | " + mp_b + ";\n"
+            module_body += "assign data_out[" + str(len(output_idxs)*(i+1)-1) + ":" + str(len(output_idxs)*i) + "] = " + mp_a + " | " + mp_b + ";\n"
     else:
         # do the max pool with 2 inputs buffering in a reg
         module_body += """
-reg [255:0] mp_reg;
+reg [""" + str( len(output_idxs)-1 ) + """:0] mp_reg;
 reg first_is_in;
 reg vld_final;
 assign vld_out = vld_final;
@@ -375,8 +329,9 @@ end
 
 if __name__ == "__main__":
     pixels_per_cycle = 1
-    img_size = 512
-    mod_name = "lyr2"
+    lyr_idx = int( sys.argv[4] )
+    img_size = int( 1024 / ( 1 << (lyr_idx - 1) ) )
+    mod_name = "lyr" + str(lyr_idx)
     f = open( sys.argv[1] )
     rdr = csv.reader( f )
     data = [ [ int(x) for x in y ] for y in rdr ]
@@ -386,7 +341,7 @@ if __name__ == "__main__":
     f = open( sys.argv[2] )
     rdr = csv.reader( f )
     c_vec = [ [ int(x) for x in y ] for y in rdr ][0]
-    module_header = make_module_header( 256, pixels_per_cycle, img_size, mod_name )
+    module_header = make_module_header( len(output_idxs), pixels_per_cycle, img_size, mod_name )
     module_txt = generate_layer_module( pixels_per_cycle, adder_ops, output_idxs, no_inputs, c_vec, mod_name + "_" )
     f = open( sys.argv[3], "w" )
     f.write( module_header )

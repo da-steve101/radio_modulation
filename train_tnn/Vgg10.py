@@ -30,7 +30,7 @@ def get_conv_layer_orig( x, training, no_filt = 64 ):
     cnn = q.shaped_relu( cnn )
     return cnn
 
-def get_net( x, training = False, use_SELU = False, low_prec = True ):
+def get_net( x, training = False, use_SELU = False, low_prec = True, nu = 1.0 ):
     mean, var = tf.nn.moments(x, axes=[1])
     mean = tf.expand_dims( mean, 1 )
     mean = tf.tile( mean, [ 1, x.get_shape()[1], 1 ] )
@@ -38,17 +38,17 @@ def get_net( x, training = False, use_SELU = False, low_prec = True ):
     with tf.variable_scope("lyr1"):
         cnn = get_conv_layer( x, training, nu = 0.7, low_prec = low_prec )
     with tf.variable_scope("lyr2"):
-        cnn = get_conv_layer( cnn, training, nu = 1.0, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
     with tf.variable_scope("lyr3"):
-        cnn = get_conv_layer( cnn, training, nu = 1.0, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
     with tf.variable_scope("lyr4"):
-        cnn = get_conv_layer( cnn, training, nu = 1.0, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
     with tf.variable_scope("lyr5"):
-        cnn = get_conv_layer( cnn, training, nu = 1.0, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
     with tf.variable_scope("lyr6"):
-        cnn = get_conv_layer( cnn, training, nu = 1.0, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
     with tf.variable_scope("lyr7"):
-        cnn = get_conv_layer( cnn, training, nu = 1.0, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
     cnn = tf.layers.flatten( cnn )
     dense_1 = tf.get_variable( "dense_8", [ cnn.get_shape()[-1], 128 ], initializer = get_initializer() )
     dense_2 = tf.get_variable( "dense_9", [ 128, 128 ], initializer = get_initializer() )
