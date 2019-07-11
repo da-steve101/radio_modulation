@@ -18,7 +18,7 @@ def get_conv_layer( x, training, no_filt = 128, nu = None, low_prec = True ):
         tf.summary.histogram( "conv_dist", cnn )
         tf.summary.histogram( "conv_filter", conv_filter )
     if low_prec:
-        cnn = q.shaped_relu( cnn )
+        cnn = q.shaped_relu( cnn, low_prec )
     else:
         cnn = tf.nn.relu( cnn )
     return cnn
@@ -36,19 +36,19 @@ def get_net( x, training = False, use_SELU = False, low_prec = True, nu = 1.0 ):
     mean = tf.tile( mean, [ 1, x.get_shape()[1], 1 ] )
     x = ( x - mean )
     with tf.variable_scope("lyr1"):
-        cnn = get_conv_layer( x, training, nu = 0.7, low_prec = low_prec )
+        cnn = get_conv_layer( x, training, nu = 0.7, low_prec = 1*low_prec )
     with tf.variable_scope("lyr2"):
-        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = 1*low_prec )
     with tf.variable_scope("lyr3"):
-        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = 2*low_prec )
     with tf.variable_scope("lyr4"):
-        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = 4*low_prec )
     with tf.variable_scope("lyr5"):
-        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = 8*low_prec )
     with tf.variable_scope("lyr6"):
-        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = 16*low_prec )
     with tf.variable_scope("lyr7"):
-        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = low_prec )
+        cnn = get_conv_layer( cnn, training, nu = nu, low_prec = 1*low_prec ) # change back to 1 bit for dense layers
     cnn = tf.layers.flatten( cnn )
     dense_1 = tf.get_variable( "dense_8", [ cnn.get_shape()[-1], 128 ], initializer = get_initializer() )
     dense_2 = tf.get_variable( "dense_9", [ 128, 128 ], initializer = get_initializer() )

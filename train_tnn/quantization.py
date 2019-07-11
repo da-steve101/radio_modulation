@@ -29,12 +29,10 @@ def quantize_activations( xr, k ):
     quant = quantize( clipped, k )
     return stop_grad( xr, quant )
 
-
-def shaped_relu( x, a = 1.0 ):
+def shaped_relu( x, k = 1.0 ):
     # return tf.nn.relu( x )
-    b = 0.5 #( 1 - a )/ 2
-    act = tf.clip_by_value( a*x + b, 0, 1 )
-    quant = tf.round( act )
+    act = tf.clip_by_value( x, 0, 1 )
+    quant = quantize( act, k ) # tf.round( act )
     return act  + tf.stop_gradient( quant - act )
 
 def trinarize( x, nu = 1.0 ):
