@@ -8,8 +8,8 @@ def get_initializer():
 
 def get_conv_layer_full_prec( x, training, no_filt = 64 ):
     cnn = tf.layers.conv1d( x, no_filt, 3, padding = "SAME", use_bias = False )
-    cnn = tf.layers.batch_normalization( cnn, training = training )
     cnn = tf.layers.max_pooling1d( cnn, 2, 2 )
+    cnn = tf.layers.batch_normalization( cnn, training = training )
     cnn = tf.nn.relu( cnn )
     return cnn
 
@@ -39,7 +39,7 @@ def get_net( x, training = False, use_SELU = False, low_prec = None, nu = None, 
     if nu is None:
         nu = [None]*9
     if low_prec is None:
-        low_prec = [None]*7
+        low_prec = [None]*9
     with tf.variable_scope("lyr1"):
         cnn = get_conv_layer( x, training, no_filt = no_filt, nu = nu[0], low_prec = low_prec[0] )
     with tf.variable_scope("lyr2"):

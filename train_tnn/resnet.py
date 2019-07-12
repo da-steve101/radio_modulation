@@ -47,7 +47,7 @@ def residual_stack( x, no_filt, training = False, nu = None ):
 def get_initializer():
     return tf.variance_scaling_initializer(scale=1.0, mode='fan_in')
 
-def get_net( x, training = False, use_SELU = False ):
+def get_net( x, training = False ):
     # remove the bias from all examples and make
     mean, var = tf.nn.moments(x, axes=[1])
     mean = tf.expand_dims( mean, 1 )
@@ -67,38 +67,16 @@ def get_net( x, training = False, use_SELU = False ):
     with tf.variable_scope("block_6"):
         cnn = residual_stack( cnn, no_filt, training = training, nu = 1.0 )
     cnn = tf.layers.flatten( cnn )
-    if use_SELU:
-        with tf.variable_scope("dense_1"):
-            cnn = tf.layers.dense( cnn, 128, kernel_initializer = get_initializer() )
-            cnn = tf.nn.selu( cnn )
-            dropped = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
-            cnn = tf.where( training, dropped, cnn )
-        with tf.variable_scope("dense_2"):
-            cnn = tf.layers.dense( cnn, 128, kernel_initializer = get_initializer() )
-            cnn = tf.nn.selu( cnn )
-            dropped = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
-            cnn = tf.where( training, dropped, cnn )
-    else:
-        dense_1 = tf.get_variable( "dense_8", [ cnn.get_shape()[-1], 128 ], initializer = get_initializer() )
-        dense_2 = tf.get_variable( "dense_9", [ 128, 128 ], initializer = get_initializer() )
-        nu = 1.4
-        if nu is not None:
-            dense_1 = q.trinarize( dense_1, nu = nu )
-            dense_2 = q.trinarize( dense_2, nu = nu )
-        with tf.variable_scope("dense_1"):
-            cnn = tf.matmul( cnn, dense_1 )
-            cnn = tf.layers.batch_normalization( cnn, training = training )
-            if nu is None:
-                cnn = tf.nn.relu( cnn )
-            else:
-                cnn = q.shaped_relu( cnn )
-        with tf.variable_scope("dense_2"):
-            cnn = tf.matmul( cnn, dense_2 )
-            cnn = tf.layers.batch_normalization( cnn, training = training )
-            if nu is None:
-                cnn = tf.nn.relu( cnn )
-            else:
-                cnn = q.shaped_relu( cnn )
+    with tf.variable_scope("dense_1"):
+        cnn = tf.layers.dense( cnn, 128, kernel_initializer = get_initializer() )
+        cnn = tf.nn.selu( cnn )
+        dropped = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
+        cnn = tf.where( training, dropped, cnn )
+    with tf.variable_scope("dense_2"):
+        cnn = tf.layers.dense( cnn, 128, kernel_initializer = get_initializer() )
+        cnn = tf.nn.selu( cnn )
+        dropped = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
+        cnn = tf.where( training, dropped, cnn )
     with tf.variable_scope("dense_3"):
         pred = tf.layers.dense( cnn, 24 )
     return pred
