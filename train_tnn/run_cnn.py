@@ -138,156 +138,6 @@ def train_loop( opt, summary_writer, num_correct, training, no_steps = 100000, d
         tf.logging.log( tf.logging.INFO, "Ctrl-c recieved, training stopped" )
     return
 
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument( "--model_name", type = str, required = True,
-                         help="The model name to train or test")
-    parser.add_argument( "--dataset", type = str, required = True,
-                         help = "The dataset to train or test on" )
-    parser.add_argument( "--val_dataset", type = str,
-                         help = "The dataset to validate on when training" )
-    parser.add_argument( "--steps", type = int,
-                         help = "The number of training steps" )
-    parser.add_argument( "--test", action = "store_true",
-                         help = "Test the model on this dataset" )
-    parser.add_argument( "--use_VGG", action = "store_true",
-                         help = "Use Vgg instead of resnet" )
-    parser.add_argument( "--test_output", type = str,
-                         help = "Filename to save the output in csv format ( pred, label )" )
-    parser.add_argument( "--test_batches", type = int, default = NO_TEST_BATCHES,
-                         help = "Number of batches to run on" )
-    parser.add_argument( "--batch_size", type=int, default = 32,
-                         help = "Batch size to use" )
-    parser.add_argument( "--quantize_w", type=int,
-                         help = "Quantize Weights" )
-    parser.add_argument( "--quantize_act", type=int,
-                         help = "Quantize Activations" )
-    parser.add_argument( "--learning_rate", type=float, default = 0.001,
-                         help = "The learning rate to use when training" )
-    parser.add_argument( "--nu", type=float, default = 1.0,
-                         help = "The parameter to use when trinarizing" )
-    parser.add_argument( "--use_SELU", action="store_true",
-                         help = "Use Self-Normalizing networks" )
-    return parser.parse_args()
-
-def weights_diff_err( quantize_w, scaling = 0.1 ):
-    coll = tf.get_collection( "Weights" )
-    total_full = 0
-    total_quant = 0
-    for i in [ str(i) for i in range( 1, 8 ) ]:
-        cnn_weights = [ w for w in coll if i in w.name ]
-        if "full" in cnn_weights[0].name:
-            full_w = cnn_weights[0]
-            quant_w = cnn_weights[1]
-        else:
-            quant_w = cnn_weights[0]
-            full_w = cnn_weights[1]
-        '''
-        if quantize_w:
-            full_w = q.quantize_weights( full_w, quantize_w )
-        '''
-        total_full += tf.reduce_sum( tf.square( full_w - tf.stop_gradient( quant_w ) ) )
-        total_quant += tf.reduce_sum( tf.square( tf.stop_gradient( full_w ) - quant_w ) )
-    errA = total_full*scaling/14
-    errB = total_quant*scaling/14
-    return errA, errB
-
-def teacher_student_opt( resnet_pred, quant_pred, label, learning_rate, quantize_w ):
-    l2_loss = tf.nn.l2_loss( tf.stop_gradient( resnet_pred ) - quant_pred )/4000
-    quant_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels = label,
-        logits = quant_pred,
-        name = "softmax_err_func_q"
-    )
-    res_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels = label,
-        logits = resnet_pred,
-        name = "softmax_err_func_r"
-    )
-    lr = tf.train.exponential_decay(
-        learning_rate,
-        tf.train.get_or_create_global_step(),
-        100000,
-        0.96
-    )
-    total_loss = quant_err # + l2_loss
-    tf.summary.scalar( "guidence_loss", tf.reduce_sum( l2_loss ) )
-    tf.summary.scalar( "student_loss", tf.reduce_sum( quant_err ) )
-    tf.summary.scalar( "teacher_loss", tf.reduce_sum( res_err ) )
-    pred = tf.math.argmax( quant_pred, axis = 1 )
-    correct = tf.cast( tf.math.equal( pred, tf.cast( label, tf.int64 ) ), tf.float32 )
-    accr = tf.reduce_mean( correct )
-    tf.summary.histogram( "preds", pred )
-    tf.summary.scalar( "accuracy", accr )
-    tf.summary.scalar( "learning_rate", tf.reduce_sum( lr ) )
-    opt_A = tf.train.AdamOptimizer( lr )
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    with tf.control_dependencies(update_ops):
-        op_A = opt_A.minimize( total_loss, global_step = tf.train.get_or_create_global_step() )
-    return op_A
-
-def guided_training_opt( full_prec_pred, quant_pred, label, learning_rate, quantize_w ):
-    full_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels = label,
-        logits = full_prec_pred,
-        name = "softmax_err_func_f"
-    )
-    tf.summary.scalar( "train_err_full", tf.reduce_sum( full_err ) )
-    quant_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels = label,
-        logits = quant_pred,
-        name = "softmax_err_func_q"
-    )
-    tf.summary.scalar( "train_err_quant", tf.reduce_sum( quant_err ) )
-    weights_errA, weights_errB = weights_diff_err( quantize_w )
-    lr = tf.train.exponential_decay(
-        learning_rate,
-        tf.train.get_or_create_global_step(),
-        100000,
-        0.96
-    )
-    # lr = learning_rate
-    pred = tf.math.argmax( quant_pred, axis = 1 )
-    correct = tf.cast( tf.math.equal( pred, tf.cast( label, tf.int64 ) ), tf.float32 )
-    accr = tf.reduce_mean( correct )
-    tf.summary.histogram( "preds", pred )
-    tf.summary.scalar( "learning_rate", tf.reduce_sum( lr ) )
-    tf.summary.scalar( "accuracy", accr )
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    tf.summary.scalar( "weights_errA", weights_errA )
-    tf.summary.scalar( "weights_errB", weights_errB )
-    tf.summary.scalar( "full_err", tf.reduce_mean( full_err ) )
-    tf.summary.scalar( "quant_err", tf.reduce_mean( quant_err ) )
-    err_A = full_err + weights_errA
-    err_B = quant_err + weights_errB
-    opt_A = tf.train.AdamOptimizer( lr )
-    opt_B = tf.train.AdamOptimizer( lr )
-    with tf.control_dependencies(update_ops):
-        op_A = opt_A.minimize( err_A, global_step = tf.train.get_or_create_global_step() )
-        op_B = opt_B.minimize( err_B, global_step = tf.train.get_or_create_global_step() )
-    return op_A, op_B
-
-def guided_train_loop( opt_A, opt_B, summary_writer, num_correct, training, no_steps = 100000, do_val = True ):
-    summaries = tf.summary.merge_all()
-    curr_step = tf.train.get_global_step()
-    step = sess.run( curr_step )
-    tf.logging.log( tf.logging.INFO, "Starting train loop at step " + str(step) )
-    try:
-        for i in range( step, no_steps ):
-            step_A, _, smry_A = sess.run( [ curr_step, opt_A, summaries ], feed_dict = { training : True } )
-            step, _, smry_B = sess.run( [ curr_step, opt_B, summaries ], feed_dict = { training : True } )
-            if step_A % 40 in [ 0, 1 ]:
-                summary_writer.add_summary( smry_B, step_A )
-            if step_A % 20000 in [ 0, 1 ] and do_val:
-                cnt = 0
-                for i in range( NO_TEST_BATCHES ):
-                    corr = sess.run( num_correct, feed_dict = { training : False } )
-                    cnt += corr
-                tf.logging.log( tf.logging.INFO, "Step: " + str( step ) + " - Test batch complete: accr = " + str( cnt / NO_TEST_EXAMPLES )  )
-    except KeyboardInterrupt:
-        tf.logging.log( tf.logging.INFO, "Ctrl-c recieved, training stopped" )
-    return
-
 def print_conf_mat( preds, labels ):
     classes = ['32PSK', '16APSK', '32QAM', 'FM', 'GMSK',
                '32APSK', 'OQPSK', '8ASK', 'BPSK', '8PSK',
@@ -301,10 +151,44 @@ def print_conf_mat( preds, labels ):
     for i, x in enumerate( conf_mat ):
         print( classes[i] + "\t" + ",\t".join( [ str(y) for y in x ]) )
 
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument( "--model_name", type = str, required = True,
+                         help="The model name to train or test")
+    parser.add_argument( "--dataset", type = str, required = True,
+                         help = "The dataset to train or test on" )
+    parser.add_argument( "--val_dataset", type = str,
+                         help = "The dataset to validate on when training" )
+    parser.add_argument( "--steps", type = int,
+                         help = "The number of training steps" )
+    parser.add_argument( "--test", action = "store_true",
+                         help = "Test the model on this dataset" )
+    parser.add_argument( "--test_output", type = str,
+                         help = "Filename to save the output in csv format ( pred, label )" )
+    parser.add_argument( "--test_batches", type = int, default = NO_TEST_BATCHES,
+                         help = "Number of batches to run on" )
+    parser.add_argument( "--batch_size", type=int, default = 32,
+                         help = "Batch size to use" )
+    parser.add_argument( "--learning_rate", type=float, default = 0.001,
+                         help = "The learning rate to use when training" )
+    group = parser.add_mutually_exclusive_group( required = True )
+    group.add_argument("--resnet", action='store_true', help = "Run resnet" )
+    group.add_argument("--full_prec", action='store_true', help = "Run full precision VGG with SELU" )
+    group.add_argument("--twn", action='store_true', help = "Run Vgg with ternary weights" )
+    group.add_argument("--twn_binary_act", action='store_true', help = "Run Vgg with ternary weights and binary activations" )
+    group.add_argument("--twn_incr_act", type=int, help = "Run Vgg with ternary weights and incrementatal precision activations\nInput int the the number of bin act layers from the top, after that double each layer until >= 16\nWhen >= 16 switch to floating point\nWill binaraize the last conv layer and the dense layers" )
+    parser.add_argument( "--nu_conv", type=float,
+                         help = "The parameter to use when trinarizing the conv layers" )
+    parser.add_argument( "--nu_dense", type=float,
+                         help = "The parameter to use when trinarizing the dense layers" )
+    parser.add_argument( "--no_filt_vgg", type=int, default = 64,
+                         help = "number of filters to use for vgg" )
+    return parser.parse_args()
+
 if __name__ == "__main__":
     args = get_args()
     iterator = batcher( args.dataset, args.batch_size, not args.test )
-    os.environ["CUDA_VISIBLE_DEVICES"]="0"
+    os.environ["CUDA_VISIBLE_DEVICES"]="1"
     tf.logging.set_verbosity( tf.logging.INFO )
     training = tf.placeholder( tf.bool, name = "training" )
     if not args.test:
@@ -322,49 +206,31 @@ if __name__ == "__main__":
     else:
         signal, label, snr = iterator.get_next()
     with tf.device('/device:GPU:0'):
-        if args.use_VGG:
-            if args.quantize_w is None:
-                quantize_w = False
-            else:
-                quantize_w = args.quantize_w
-            if args.quantize_act is None:
-                quantize_act = False
-            else:
-                quantize_act = args.quantize_act
-            with tf.variable_scope( "resnet" ):
-                res_pred = resnet.get_net( signal, training = False, use_SELU = args.use_SELU )
-            # with tf.variable_scope( "full" ):
-            #    full_prec_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU )
-            with tf.variable_scope( "quant" ):
-                quant_pred = Vgg10.get_net( signal, training = training, use_SELU = args.use_SELU, low_prec = not args.use_SELU, nu = args.nu )
-            pred = quant_pred
-        else:
+        if args.resnet
             pred = resnet.get_net( signal, training = training, use_SELU = args.use_SELU )
+        elif args.full_prec:
+            pred = get_net( x, training, use_SELU = True, low_prec = None, nu = None, no_filt = args.no_filt_vgg )
+        elif args.twn:
+            nu = [args.nu_conv]*6 + [ args.nu_dense]*2
+            pred = Vgg10.get_net( signal, training, use_SELU = False, low_prec = None, nu = nu, no_filt = args.no_filt_vgg )
+        elif args.twn_binary_act:
+            nu = [args.nu_conv]*6 + [ args.nu_dense]*2
+            low_prec = [1]*9
+            pred = Vgg10.get_net( signal, training, use_SELU = False, low_prec = low_prec, nu = nu, no_filt = args.no_filt_vgg )
+        elif args.twn_incr_act is not None:
+            nu = [args.nu_conv]*6 + [ args.nu_dense]*2
+            low_prec = [1]*args.twn_incr_act + [ 1 << ( i + 1 ) for i in range(7-args.twn_incr_act) ] + [1]*2
+            low_prec = [ x if x < 16 else None for x in low_prec ]
+            pred = Vgg10.get_net( signal, training, use_SELU = False, low_prec = low_prec, nu = nu, no_filt = args.no_filt_vgg )
+        else:
+            tf.logging.log( tf.logging.ERROR, "Invalid arguments" )
+            exit()
     if not args.test:
         pred_label = tf.cast( tf.math.argmax( pred, axis = 1 ), tf.int32 )
         num_correct = tf.reduce_sum( tf.cast( tf.math.equal( pred_label, label ), tf.float32 ) )
         num_correct = tf.reshape( num_correct, [] )
-        if args.use_VGG:
-            opt_q = teacher_student_opt( res_pred, quant_pred, label, args.learning_rate, quantize_w )
-            # opt_q = get_optimizer( res_pred, label, args.learning_rate )
-            opt_f = opt_q
-            # opt_f, opt_q = guided_training_opt( full_prec_pred, quant_pred, label, args.learning_rate, quantize_w )
-        else:
-            opt = get_optimizer( pred, label, args.learning_rate )
+        opt = get_optimizer( pred, label, args.learning_rate )
     init_op = tf.global_variables_initializer()
-    res_only = False
-    if res_only:
-        reader = pywrap_tensorflow.NewCheckpointReader( args.model_name )
-        var_to_shape_map = reader.get_variable_to_shape_map()
-        tensors_to_load = set([ x for x in var_to_shape_map if "resnet" in x ])
-        # tensors_to_load = set([ x for x in var_to_shape_map if "quant/lyr" not in x or "scaling/Adam" not in x ])
-        nodes = {}
-        grph = tf.get_default_graph()
-        for n in grph.as_graph_def().node:
-            if n.name in tensors_to_load:
-                tnsr = grph.as_graph_element( n.name ).outputs[0]
-                nodes[n.name] = tnsr
-        res_saver = tf.train.Saver( nodes )
     saver = tf.train.Saver()
     with tf.Session() as sess:
         try:
@@ -376,18 +242,13 @@ if __name__ == "__main__":
             # load the model if possible
             if tf.train.checkpoint_exists( args.model_name ):
                 tf.logging.log( tf.logging.INFO, "Loading model ... " )
-                if res_only:
-                    res_saver.restore( sess, args.model_name )
-                else:
-                    saver.restore(sess, args.model_name )
+                saver.restore(sess, args.model_name )
             if args.test:
                 test_loop( snr, pred, label, training, args.test_output, args.test_batches )
             else:
-                if args.use_VGG:
-                    guided_train_loop( opt_f, opt_q, smry_wrt, num_correct, training, no_steps = args.steps, do_val = do_val )
-                else:
-                    train_loop( opt, smry_wrt, num_correct, training, no_steps = args.steps, do_val = do_val )
-                tf.logging.log( tf.logging.INFO, "Saving model ... " )
-                saver.save( sess, args.model_name )
+                train_loop( opt, smry_wrt, num_correct, training, no_steps = args.steps, do_val = do_val )
         except tf.errors.OutOfRangeError:
             tf.logging.log( tf.logging.INFO, "Dataset is finished" )
+        finally:
+            tf.logging.log( tf.logging.INFO, "Saving model ... " )
+            saver.save( sess, args.model_name )
