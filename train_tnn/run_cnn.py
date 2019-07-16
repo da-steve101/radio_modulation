@@ -8,7 +8,6 @@ import Vgg10
 from tqdm import tqdm
 import os
 import quantization as q
-from tensorflow.python import pywrap_tensorflow
 
 '''
 Classes:
@@ -73,18 +72,23 @@ def batcher( input_file, batch_size, training = True ):
         iterator = dset.make_one_shot_iterator()
     return iterator
 
-def get_optimizer( pred, label, learning_rate ):
+def get_optimizer( pred, label, learning_rate, resnet_pred = None ):
     err = tf.nn.sparse_softmax_cross_entropy_with_logits(
         labels = label,
         logits = pred,
         name = "softmax_err_func"
     )
-    tf.summary.scalar( "train_err", tf.reduce_sum( err ) )
+    err = tf.reduce_sum( err )
+    tf.summary.scalar( "train_err", err )
+    if resnet_pred is not None:
+        student_err = tf.nn.l2_loss( resnet_pred - pred )
+        tf.summary.scalar( "student_err", student_err )
+        err = student_err + err
     lr = tf.train.exponential_decay(
         learning_rate,
         tf.train.get_or_create_global_step(),
         100000,
-        0.96
+        0.5
     )
     # lr = learning_rate
     pred = tf.math.argmax( pred, axis = 1 )
@@ -155,6 +159,8 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument( "--model_name", type = str, required = True,
                          help="The model name to train or test")
+    parser.add_argument( "--teacher_name", type = str,
+                         help="The resnet teacher model to train with")
     parser.add_argument( "--dataset", type = str, required = True,
                          help = "The dataset to train or test on" )
     parser.add_argument( "--val_dataset", type = str,
@@ -183,14 +189,15 @@ def get_args():
                          help = "The parameter to use when trinarizing the dense layers" )
     parser.add_argument( "--no_filt_vgg", type=int, default = 64,
                          help = "number of filters to use for vgg" )
-    parser.add_argument( "--gpus", type=str, default = "0,1",
+    parser.add_argument( "--gpus", type=str,
                          help = "GPUs to use" )
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = get_args()
     iterator = batcher( args.dataset, args.batch_size, not args.test )
-    os.environ["CUDA_VISIBLE_DEVICES"]=args.gpus
+    if args.gpus is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"]=args.gpus
     tf.logging.set_verbosity( tf.logging.INFO )
     training = tf.placeholder( tf.bool, name = "training" )
     if not args.test:
@@ -207,22 +214,22 @@ if __name__ == "__main__":
             do_val = False
     else:
         signal, label, snr = iterator.get_next()
+    nu = [0.7] + [args.nu_conv]*6 + [args.nu_dense]*2
     if args.resnet:
-        pred = resnet.get_net( signal, training = training )
+        with tf.variable_scope("teacher"):
+            pred = resnet.get_net( signal, training = training )
     elif args.full_prec:
-        pred = Vgg10.get_net( signal, training, use_SELU = True, low_prec = None, nu = None, no_filt = args.no_filt_vgg )
+        pred = Vgg10.get_net( signal, training, use_SELU = True, act_prec = None, nu = None, no_filt = args.no_filt_vgg )
     elif args.twn:
-        nu = [args.nu_conv]*7 + [ args.nu_dense]*2
-        pred = Vgg10.get_net( signal, training, use_SELU = False, low_prec = None, nu = nu, no_filt = args.no_filt_vgg )
+        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = None, nu = nu, no_filt = args.no_filt_vgg )
     elif args.twn_binary_act:
-        nu = [args.nu_conv]*7 + [ args.nu_dense]*2
-        low_prec = [1]*9
-        pred = Vgg10.get_net( signal, training, use_SELU = False, low_prec = low_prec, nu = nu, no_filt = args.no_filt_vgg )
+        act_prec = [1]*9
+        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = args.no_filt_vgg )
     elif args.twn_incr_act is not None:
-        nu = [args.nu_conv]*7 + [ args.nu_dense]*2
-        low_prec = [1]*args.twn_incr_act + [ 1 << ( i + 1 ) for i in range(7-args.twn_incr_act) ] + [1]*2
-        low_prec = [ x if x < 16 else None for x in low_prec ]
-        pred = Vgg10.get_net( signal, training, use_SELU = False, low_prec = low_prec, nu = nu, no_filt = args.no_filt_vgg )
+        # last conv and dense layers should be bin
+        act_prec = [1]*args.twn_incr_act + [ 1 << ( i + 1 ) for i in range(6-args.twn_incr_act) ] + [1]*3
+        act_prec = [ x if x < 16 else None for x in act_prec ]
+        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = args.no_filt_vgg )
     else:
         tf.logging.log( tf.logging.ERROR, "Invalid arguments" )
         exit()
@@ -230,7 +237,13 @@ if __name__ == "__main__":
         pred_label = tf.cast( tf.math.argmax( pred, axis = 1 ), tf.int32 )
         num_correct = tf.reduce_sum( tf.cast( tf.math.equal( pred_label, label ), tf.float32 ) )
         num_correct = tf.reshape( num_correct, [] )
-        opt = get_optimizer( pred, label, args.learning_rate )
+        if not args.resnet and args.teacher_name is not None:
+            with tf.variable_scope("teacher"):
+                resnet_pred = tf.stop_gradient( resnet.get_net( signal, training = False ) )
+            resnet_saver = tf.train.Saver( tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="teacher") )
+            opt = get_optimizer( pred, label, args.learning_rate, resnet_pred )
+        else:
+            opt = get_optimizer( pred, label, args.learning_rate )
     init_op = tf.global_variables_initializer()
     saver = tf.train.Saver()
     with tf.Session() as sess:
@@ -245,6 +258,9 @@ if __name__ == "__main__":
             if tf.train.checkpoint_exists( args.model_name ):
                 tf.logging.log( tf.logging.INFO, "Loading model ... " )
                 saver.restore(sess, args.model_name )
+            if args.teacher_name is not None and tf.train.checkpoint_exists( args.teacher_name ):
+                tf.logging.log( tf.logging.INFO, "Loading teacher ... " )
+                resnet_saver.restore(sess, args.teacher_name )
             if args.test:
                 test_loop( snr, pred, label, training, args.test_output, args.test_batches )
             else:
