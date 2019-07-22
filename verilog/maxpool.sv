@@ -36,13 +36,14 @@ module maxpool
       for ( i = 0; i < NO_CH; i++ ) begin
 	 reg [BUF_SIZE-1:0]  dly;
 	 always @( posedge clk ) begin
-	    $display( "input_buffer[%x] = %x, dly = %x, max_flag = %x, max_x = %x", i, input_buffer[i], dly, max_flag[i], max_x[i] );
-	    if ( SER_BW == 2*BW_IN ) begin
-	       input_buffer[i] <= data_in[i];
-	    end else begin
-	       assert (SER_BW <= BW_IN) else $error( "SER_BW = %x must be either 2*BW_IN or <= BW_IN = %x", SER_BW, BW_IN );
-	       input_buffer[i][BUF_SIZE-1:BUF_SIZE-SER_BW] <= data_in[i];
-	       input_buffer[i][BUF_SIZE-SER_BW-1:0] <= input_buffer[i][BUF_SIZE-1:SER_BW];
+	    if ( vld_in ) begin
+	       if ( SER_BW == 2*BW_IN ) begin
+		  input_buffer[i] <= data_in[i];
+	       end else begin
+		  assert (SER_BW <= BW_IN) else $error( "SER_BW = %x must be either 2*BW_IN or <= BW_IN = %x", SER_BW, BW_IN );
+		  input_buffer[i][BUF_SIZE-1:BUF_SIZE-SER_BW] <= data_in[i];
+		  input_buffer[i][BUF_SIZE-SER_BW-1:0] <= input_buffer[i][BUF_SIZE-1:SER_BW];
+	       end
 	    end
 	    dly <= input_buffer[i];
 	    if ( max_flag[i] ) begin
@@ -51,7 +52,6 @@ module maxpool
 	       max_x[i] <= dly[BW_IN-1:0];
 	    end
 	    max_flag[i] <= $signed( input_buffer[i][BW_IN-1+DATA_SIZE:DATA_SIZE] ) >= $signed( input_buffer[i][BW_IN-1:0] );
-	    $display( "comparing %x, %x", $signed( input_buffer[i][BW_IN-1+DATA_SIZE:DATA_SIZE] ), $signed( input_buffer[i][BW_IN-1:0] ) );
 	 end
       end
    endgenerate

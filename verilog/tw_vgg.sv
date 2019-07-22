@@ -1,0 +1,621 @@
+`timescale 1ns / 1ps
+
+module tw_vgg (
+input clk,
+input rst,
+input vld_in,
+input [1:0][15:0] data_in,
+output vld_out,
+output [63:0][15:0] data_out
+);
+
+`include "bn1.sv"
+`include "bn2.sv"
+`include "bn3.sv"
+`include "bn4.sv"
+`include "bn5.sv"
+`include "bn6.sv"
+`include "bn7.sv"
+
+   // window lyr 1
+   wire [31:0] 	    w1_in [0:0];
+   assign w1_in[0] = data_in;
+   wire [31:0] 	    w1_out [2:0];
+   wire 	    w1_vld;
+   wire [5:0][15:0] window_c1;
+
+   // window lyr 2
+   wire 	    w2_vld;
+   wire [511:0]     w2_in;
+   wire [511:0]     w2_out [2:0];
+   wire [191:0][7:0] window_c2;
+   wire c2_ser_rst;
+
+   // window lyr 3
+   wire w3_vld;
+   wire [255:0]     w3_in;
+   wire [255:0]     w3_out [2:0];
+   wire [191:0][3:0] window_c3;
+   wire c3_ser_rst;
+
+   // window lyr 4
+   wire w4_vld;
+   wire [127:0]     w4_in;
+   wire [127:0]     w4_out [2:0];
+   wire [191:0][1:0] window_c4;
+   wire c4_ser_rst;
+
+   // window lyr 5
+   wire w5_vld;
+   wire [63:0]     w5_in;
+   wire [63:0]     w5_out [2:0];
+   wire [191:0]    window_c5;
+   wire c5_ser_rst;
+
+   // window lyr 6
+   wire w6_vld;
+   wire [63:0]     w6_in;
+   wire [63:0]     w6_out [2:0];
+   wire [191:0]    window_c6;
+   wire c6_ser_rst;
+
+   // window lyr 7
+   wire w7_vld;
+   wire [63:0]     w7_in;
+   wire [63:0]     w7_out [2:0];
+   wire [191:0]    window_c7;
+   wire c7_ser_rst;
+
+   wire [63:0][15:0] bn1_out, bn2_out, bn3_out, bn4_out, bn5_out, bn6_out, bn7_out;
+   wire 	     bn1_vld, bn2_vld, bn3_vld, bn4_vld, bn5_vld, bn6_vld, bn7_vld;
+   wire [63:0][15:0] mp1_out, mp2_out, mp3_out, mp4_out, mp5_out, mp6_out, mp7_out;
+   wire 	     mp1_vld, mp2_vld, mp3_vld, mp4_vld, mp5_vld, mp6_vld, mp7_vld;
+
+   wire [63:0][15:0] c1_out, fser_out;
+   wire 	     c1_vld, fser_vld;
+   wire [63:0][7:0] ts1_out, c2_out;
+   wire 	    ts1_vld, c2_vld;
+   wire [63:0][3:0] ts2_out, c3_out;
+   wire 	    ts2_vld, c3_vld;
+   wire [63:0][1:0] ts3_out, c4_out;
+   wire 	    ts3_vld, c4_vld;
+   wire [63:0] ts4_out, c5_out, ts5_out, c6_out, ts6_out, c7_out;
+   wire        ts4_vld, c5_vld, ts5_vld, c6_vld, ts6_vld, c7_vld;
+
+   // some hackery for when throughput is too low
+   wire [63:0][31:0] ts5_in;
+   wire 	     ts5_in_vld, w6_vld_sel;
+   reg [4:0] 	     w6_cntr;
+   wire [63:0][63:0] ts6_in;
+   wire 	     ts6_in_vld, w7_vld_sel;
+   reg [5:0] 	     w7_cntr;
+
+   always @( posedge clk ) begin
+      if ( rst ) begin
+	 w6_cntr <= 0;
+	 w7_cntr <= 0;
+      end else begin
+	 if ( w6_vld ) begin
+	    w6_cntr <= w6_cntr + 1;
+	 end
+	 if ( w7_vld ) begin
+	    w7_cntr <= w7_cntr + 1;
+	 end
+      end
+   end
+   assign w6_vld_sel = w6_vld & (w6_cntr < 16);
+   assign w7_vld_sel = w7_vld & (w7_cntr < 16);
+
+   // set the outputs
+   assign data_out = fser_out;
+   assign vld_out = fser_vld;
+
+   // implement windows
+   genvar 	    i;
+   generate
+   // layer 1
+   for ( i = 0; i < 3; i++ ) begin
+      assign window_c1[2*i] = w1_out[2-i][15:0];
+      assign window_c1[2*i+1] = w1_out[2-i][31:16];
+   end
+   for ( i = 0; i < 64; i++ ) begin
+      // lyr2
+      assign w2_in[i*8 +: 8] = ts1_out[i];
+      assign window_c2[i] = w2_out[2][8*i +: 8];
+      assign window_c2[i + 64] = w2_out[1][8*i +: 8];
+      assign window_c2[i + 128] = w2_out[0][8*i +: 8];
+      // lyr3
+      assign w3_in[i*4 +: 4] = ts2_out[i];
+      assign window_c3[i] = w3_out[2][4*i +: 4];
+      assign window_c3[i + 64] = w3_out[1][4*i +: 4];
+      assign window_c3[i + 128] = w3_out[0][4*i +: 4];
+      // lyr4
+      assign w4_in[i*2 +: 2] = ts3_out[i];
+      assign window_c4[i] = w4_out[2][2*i +: 2];
+      assign window_c4[i + 64] = w4_out[1][2*i +: 2];
+      assign window_c4[i + 128] = w4_out[0][2*i +: 2];
+      // lyr5
+      assign w5_in[i] = ts4_out[i];
+      assign window_c5[i] = w5_out[2][i];
+      assign window_c5[i + 64] = w5_out[1][i];
+      assign window_c5[i + 128] = w5_out[0][i];
+      // lyr6
+      assign ts5_in[i] = { 16'h0, bn5_out[i] };
+      assign w6_in[i] = ts5_out[i];
+      assign window_c6[i] = w6_out[2][i];
+      assign window_c6[i + 64] = w6_out[1][i];
+      assign window_c6[i + 128] = w6_out[0][i];
+      // lyr7
+      assign ts6_in[i] = { 48'h0, bn6_out[i] };
+      assign w7_in[i] = ts6_out[i];
+      assign window_c7[i] = w7_out[2][i];
+      assign window_c7[i + 64] = w7_out[1][i];
+      assign window_c7[i + 128] = w7_out[0][i];
+   end
+   endgenerate
+
+windower
+#(
+  .NO_CH(32),
+  .LOG2_IMG_SIZE(10),
+  .THROUGHPUT(1)
+) w1 (
+.clk(clk),
+.rst(rst),
+.vld_in(vld_in),
+.data_in(w1_in),
+.vld_out(w1_vld),
+.data_out(w1_out)
+);
+
+conv1 c1 (
+.clock(clk),
+.reset(rst),
+.vld_in(w1_vld),
+.in(window_c1),
+.vld_out(c1_vld),
+.out(c1_out)
+);
+
+maxpool
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .SER_BW(16)
+) mp1 (
+.clk(clk),
+.rst(rst),
+.vld_in(c1_vld),
+.data_in(c1_out),
+.vld_out(mp1_vld),
+.data_out(mp1_out)
+);
+
+bn_relu_fp
+#(
+  .NO_CH(64),
+  .BW(16),
+  .R_SHIFT(6)
+) bn_relu1 (
+.clk(clk),
+.rst(rst),
+.vld_in(mp1_vld),
+.data_in(mp1_out),
+.a(bn1_a),
+.b(bn1_b),
+.vld_out(bn1_vld),
+.data_out(bn1_out)
+);
+
+to_serial
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .BW_OUT(8)
+  ) ts1 (
+.clk(clk),
+.rst(rst),
+.vld_in(bn1_vld),
+.data_in(bn1_out),
+.vld_out(ts1_vld),
+.data_out(ts1_out)
+);
+
+windower_serial
+#(
+  .NO_CH(64*8), // 64 ch with 8 bits each
+  .LOG2_IMG_SIZE(9), // now 9 after maxpool
+  .SER_CYC(2) // must be a power of 2
+) w2 (
+.clk(clk),
+.rst(rst),
+.vld_in(ts1_vld),
+.data_in(w2_in),
+.vld_out(w2_vld),
+.data_out(w2_out),
+.ser_rst(c2_ser_rst)
+);
+
+conv2 c2 (
+.clock(clk),
+.reset(c2_ser_rst),
+.vld_in(w2_vld),
+.in(window_c2),
+.vld_out(c2_vld),
+.out(c2_out)
+);
+
+maxpool
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .SER_BW(8)
+) mp2 (
+.clk(clk),
+.rst(rst),
+.vld_in(c2_vld),
+.data_in(c2_out),
+.vld_out(mp2_vld),
+.data_out(mp2_out)
+);
+
+bn_relu_fp
+#(
+  .NO_CH(64),
+  .BW(16),
+  .R_SHIFT(6)
+) bn_relu2 (
+.clk(clk),
+.rst(rst),
+.vld_in(mp2_vld),
+.data_in(mp2_out),
+.a(bn2_a),
+.b(bn2_b),
+.vld_out(bn2_vld),
+.data_out(bn2_out)
+);
+
+to_serial
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .BW_OUT(4)
+  ) ts2 (
+.clk(clk),
+.rst(rst),
+.vld_in(bn2_vld),
+.data_in(bn2_out),
+.vld_out(ts2_vld),
+.data_out(ts2_out)
+);
+
+windower_serial
+#(
+  .NO_CH(64*4),
+  .LOG2_IMG_SIZE(8),
+  .SER_CYC(4)
+) w3 (
+.clk(clk),
+.rst(rst),
+.vld_in(ts2_vld),
+.data_in(w3_in),
+.vld_out(w3_vld),
+.data_out(w3_out),
+.ser_rst(c3_ser_rst)
+);
+
+conv3 c3 (
+.clock(clk),
+.reset(c3_ser_rst),
+.vld_in(w3_vld),
+.in(window_c3),
+.vld_out(c3_vld),
+.out(c3_out)
+);
+
+maxpool
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .SER_BW(4)
+) mp3 (
+.clk(clk),
+.rst(rst),
+.vld_in(c3_vld),
+.data_in(c3_out),
+.vld_out(mp3_vld),
+.data_out(mp3_out)
+);
+
+bn_relu_fp
+#(
+  .NO_CH(64),
+  .BW(16),
+  .R_SHIFT(6)
+) bn_relu3 (
+.clk(clk),
+.rst(rst),
+.vld_in(mp3_vld),
+.data_in(mp3_out),
+.a(bn3_a),
+.b(bn3_b),
+.vld_out(bn3_vld),
+.data_out(bn3_out)
+);
+
+to_serial
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .BW_OUT(2)
+  ) ts3 (
+.clk(clk),
+.rst(rst),
+.vld_in(bn3_vld),
+.data_in(bn3_out),
+.vld_out(ts3_vld),
+.data_out(ts3_out)
+);
+
+windower_serial
+#(
+  .NO_CH(64*2),
+  .LOG2_IMG_SIZE(7),
+  .SER_CYC(8)
+) w4 (
+.clk(clk),
+.rst(rst),
+.vld_in(ts3_vld),
+.data_in(w4_in),
+.vld_out(w4_vld),
+.data_out(w4_out),
+.ser_rst(c4_ser_rst)
+);
+
+conv4 c4 (
+.clock(clk),
+.reset(c4_ser_rst),
+.vld_in(w4_vld),
+.in(window_c4),
+.vld_out(c4_vld),
+.out(c4_out)
+);
+
+maxpool
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .SER_BW(2)
+) mp4 (
+.clk(clk),
+.rst(rst),
+.vld_in(c4_vld),
+.data_in(c4_out),
+.vld_out(mp4_vld),
+.data_out(mp4_out)
+);
+
+bn_relu_fp
+#(
+  .NO_CH(64),
+  .BW(16),
+  .R_SHIFT(6)
+) bn_relu4 (
+.clk(clk),
+.rst(rst),
+.vld_in(mp4_vld),
+.data_in(mp4_out),
+.a(bn4_a),
+.b(bn4_b),
+.vld_out(bn4_vld),
+.data_out(bn4_out)
+);
+
+to_serial
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .BW_OUT(1)
+  ) ts4 (
+.clk(clk),
+.rst(rst),
+.vld_in(bn4_vld),
+.data_in(bn4_out),
+.vld_out(ts4_vld),
+.data_out(ts4_out)
+);
+
+windower_serial
+#(
+  .NO_CH(64),
+  .LOG2_IMG_SIZE(6),
+  .SER_CYC(16)
+) w5 (
+.clk(clk),
+.rst(rst),
+.vld_in(ts4_vld),
+.data_in(w5_in),
+.vld_out(w5_vld),
+.data_out(w5_out),
+.ser_rst(c5_ser_rst)
+);
+
+conv5 c5 (
+.clock(clk),
+.reset(c5_ser_rst),
+.vld_in(w5_vld),
+.in(window_c5),
+.vld_out(c5_vld),
+.out(c5_out)
+);
+
+maxpool
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .SER_BW(1)
+) mp5 (
+.clk(clk),
+.rst(rst),
+.vld_in(c5_vld),
+.data_in(c5_out),
+.vld_out(mp5_vld),
+.data_out(mp5_out)
+);
+
+bn_relu_fp
+#(
+  .NO_CH(64),
+  .BW(16),
+  .R_SHIFT(6)
+) bn_relu5 (
+.clk(clk),
+.rst(rst),
+.vld_in(mp5_vld),
+.data_in(mp5_out),
+.a(bn5_a),
+.b(bn5_b),
+.vld_out(bn5_vld),
+.data_out(bn5_out)
+);
+
+to_serial
+#(
+  .NO_CH(64),
+  .BW_IN(32), // fill top bits with zeros
+  .BW_OUT(1)
+  ) ts5 (
+.clk(clk),
+.rst(rst),
+.vld_in(bn5_vld),
+.data_in(ts5_in),
+.vld_out(ts5_vld),
+.data_out(ts5_out)
+);
+
+windower_serial
+#(
+  .NO_CH(64),
+  .LOG2_IMG_SIZE(5),
+  .SER_CYC(32) // bw is only 16 but just idle for the other 16 cyc
+) w6 (
+.clk(clk),
+.rst(rst),
+.vld_in(ts5_vld),
+.data_in(w6_in),
+.vld_out(w6_vld),
+.data_out(w6_out),
+.ser_rst(c6_ser_rst)
+);
+
+conv6 c6 (
+.clock(clk),
+.reset(c6_ser_rst),
+.vld_in(w6_vld_sel),
+.in(window_c6),
+.vld_out(c6_vld),
+.out(c6_out)
+);
+
+maxpool
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .SER_BW(1)
+) mp6 (
+.clk(clk),
+.rst(rst),
+.vld_in(c6_vld),
+.data_in(c6_out),
+.vld_out(mp6_vld),
+.data_out(mp6_out)
+);
+
+bn_relu_fp
+#(
+  .NO_CH(64),
+  .BW(16),
+  .R_SHIFT(6)
+) bn_relu6 (
+.clk(clk),
+.rst(rst),
+.vld_in(mp6_vld),
+.data_in(mp6_out),
+.a(bn6_a),
+.b(bn6_b),
+.vld_out(bn6_vld),
+.data_out(bn6_out)
+);
+
+to_serial
+#(
+  .NO_CH(64),
+  .BW_IN(64),
+  .BW_OUT(1)
+  ) ts6 (
+.clk(clk),
+.rst(rst),
+.vld_in(bn6_vld),
+.data_in(ts6_in),
+.vld_out(ts6_vld),
+.data_out(ts6_out)
+);
+
+windower_serial
+#(
+  .NO_CH(64),
+  .LOG2_IMG_SIZE(4),
+  .SER_CYC(64)
+) w7 (
+.clk(clk),
+.rst(rst),
+.vld_in(ts6_vld),
+.data_in(w7_in),
+.vld_out(w7_vld),
+.data_out(w7_out),
+.ser_rst(c7_ser_rst)
+);
+
+conv7 c7 (
+.clock(clk),
+.reset(c7_ser_rst),
+.vld_in(w7_vld_sel),
+.in(window_c7),
+.vld_out(c7_vld),
+.out(c7_out)
+);
+
+maxpool
+#(
+  .NO_CH(64),
+  .BW_IN(16),
+  .SER_BW(1)
+) mp7 (
+.clk(clk),
+.rst(rst),
+.vld_in(c7_vld),
+.data_in(c7_out),
+.vld_out(mp7_vld),
+.data_out(mp7_out)
+);
+
+bn_relu_fp
+#(
+  .NO_CH(64),
+  .BW(16),
+  .R_SHIFT(6)
+) bn_relu7 (
+.clk(clk),
+.rst(rst),
+.vld_in(mp7_vld),
+.data_in(mp7_out),
+.a(bn7_a),
+.b(bn7_b),
+.vld_out(bn7_vld),
+.data_out(bn7_out)
+);
+
+   assign fser_vld = bn7_vld;
+   assign fser_out = bn7_out;
+
+endmodule
