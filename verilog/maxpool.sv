@@ -18,10 +18,10 @@ module maxpool
    output [NO_CH-1:0][BW_IN-1:0] data_out
 );
    // compute how many cycles needed for a compare
-   localparam BUF_CYC = $rtoi($ceil(2*BW_IN/SER_BW));
-   localparam DATA_SIZE = $rtoi(BUF_CYC*SER_BW/2);
-   localparam BUF_SIZE = BUF_CYC*SER_BW;
-   localparam CNTR_SIZE = $clog2( BUF_CYC );
+   localparam integer BUF_CYC = 2 << ($clog2(BW_IN) - $clog2(SER_BW ));
+   localparam integer DATA_SIZE = (BUF_CYC*SER_BW) >> 1;
+   localparam integer BUF_SIZE = BUF_CYC*SER_BW;
+   localparam integer CNTR_SIZE = $clog2( BUF_CYC );
    localparam LATENCY = 3;
    reg [NO_CH-1:0][BUF_SIZE-1:0]  input_buffer;
    reg [NO_CH-1:0]		  max_flag;
@@ -41,8 +41,7 @@ module maxpool
 		  input_buffer[i] <= data_in[i];
 	       end else begin
 		  assert (SER_BW <= BW_IN) else $error( "SER_BW = %x must be either 2*BW_IN or <= BW_IN = %x", SER_BW, BW_IN );
-		  input_buffer[i][BUF_SIZE-1:BUF_SIZE-SER_BW] <= data_in[i];
-		  input_buffer[i][BUF_SIZE-SER_BW-1:0] <= input_buffer[i][BUF_SIZE-1:SER_BW];
+		  input_buffer[i] <= { data_in[i], input_buffer[i][(BUF_SIZE-1):SER_BW] };
 	       end
 	    end
 	    dly <= input_buffer[i];

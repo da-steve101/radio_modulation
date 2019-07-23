@@ -9,14 +9,16 @@ module pipelined_accumulator
    input 					clk,
    input 					new_sum,
    input signed [LOG2_NO_IN:0][IN_BITWIDTH-1:0] data_in,
-   input signed [OUT_BITWIDTH:0] 		data_out
+   output signed [OUT_BITWIDTH-1:0] 		data_out
 );
 
+localparam INCR_BW = ( IN_BITWIDTH < OUT_BITWIDTH ) ? IN_BITWIDTH + 1 : IN_BITWIDTH;
+   
 genvar i;
 generate
 if ( LOG2_NO_IN <= 0 ) begin
-reg signed [OUT_BITWIDTH:0] data_out_reg;
-wire signed [OUT_BITWIDTH:0] zero;
+reg signed [OUT_BITWIDTH-1:0] data_out_reg;
+wire signed [OUT_BITWIDTH-1:0] zero;
 assign zero = 0;
 assign data_out = data_out_reg;
 always @( posedge clk ) begin
@@ -27,7 +29,7 @@ always @( posedge clk ) begin
    end
 end
 end else begin
-reg signed  [LOG2_NO_IN-1:0][IN_BITWIDTH:0] intermediate_results;
+reg signed  [LOG2_NO_IN-1:0][INCR_BW-1:0] intermediate_results;
 reg new_sum_reg;
 for ( i = 0; i < ( 1 << LOG2_NO_IN ); i = i + 2  ) begin
    always @( posedge clk ) begin
@@ -39,7 +41,7 @@ always @( posedge clk ) begin
 end
 pipelined_accumulator
   #(
-    .IN_BITWIDTH( IN_BITWIDTH + 1 ),
+    .IN_BITWIDTH( INCR_BW ),
     .OUT_BITWIDTH( OUT_BITWIDTH ),
     .LOG2_NO_IN( LOG2_NO_IN - 1 )
     ) summation

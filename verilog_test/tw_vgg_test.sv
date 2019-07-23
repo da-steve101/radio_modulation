@@ -18,8 +18,13 @@ module tw_vgg_test();
    // `include "conv6_hex.sv"
    // `include "mp6_hex.sv"
    // `include "conv7_hex.sv"
-   `include "mp7_hex.sv"
-   
+   // `include "mp7_hex.sv"
+   // `include "dense_1_hex.sv"
+   // `include "dense_1_bn_hex.sv"
+   // `include "dense_2_hex.sv"
+   // `include "dense_2_bn_hex.sv"
+   `include "dense_3_hex.sv"
+
    reg clk;
    reg rst;
    reg vld_in;
@@ -27,9 +32,10 @@ module tw_vgg_test();
    wire 		      vld_out;
    wire [CH_OUT-1:0][BW_OUT-1:0] data_out;
    reg [CNTR_BW_IN-1:0] 	 in_cntr;
-   wire [CNTR_BW_OUT-1:0] 	 out_cntr_sig;
+   localparam CNTR_BW_OUT_TRIM = (( CNTR_BW_OUT - 1 ) < 0 ) ? 0 : CNTR_BW_OUT - 1;
+   wire [CNTR_BW_OUT:0] 	 out_cntr_sig;
    reg [CNTR_BW_OUT:0] 		 out_cntr;
-   assign out_cntr_sig = out_cntr[CNTR_BW_OUT-1:0];
+   assign out_cntr_sig = (CNTR_BW_OUT == 0) ? 0 : out_cntr[CNTR_BW_OUT_TRIM:0];
 
 always @( posedge clk ) begin
    data_in <= signal_in[in_cntr];
@@ -54,7 +60,10 @@ always @( posedge clk ) begin
    end
 end
 
-tw_vgg dut (
+tw_vgg 
+#(
+  .CH_OUT(CH_OUT)
+) dut (
 .clk(clk),
 .rst(rst),
 .vld_in(vld_in),

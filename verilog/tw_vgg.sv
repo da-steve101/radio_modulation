@@ -1,12 +1,15 @@
 `timescale 1ns / 1ps
 
-module tw_vgg (
+module tw_vgg 
+#(
+  parameter CH_OUT = 64
+) (
 input clk,
 input rst,
 input vld_in,
 input [1:0][15:0] data_in,
 output vld_out,
-output [63:0][15:0] data_out
+output [CH_OUT-1:0][15:0] data_out
 );
 
 `include "bn1.sv"
@@ -71,8 +74,9 @@ output [63:0][15:0] data_out
    wire [63:0][15:0] mp1_out, mp2_out, mp3_out, mp4_out, mp5_out, mp6_out, mp7_out;
    wire 	     mp1_vld, mp2_vld, mp3_vld, mp4_vld, mp5_vld, mp6_vld, mp7_vld;
 
-   wire [63:0][15:0] c1_out, fser_out;
-   wire 	     c1_vld, fser_vld;
+   wire [63:0][15:0] c1_out;
+   wire [CH_OUT-1:0][15:0] fser_out;
+   wire 		   c1_vld, fser_vld;
    wire [63:0][7:0] ts1_out, c2_out;
    wire 	    ts1_vld, c2_vld;
    wire [63:0][3:0] ts2_out, c3_out;
@@ -153,6 +157,56 @@ output [63:0][15:0] data_out
       assign window_c7[i + 128] = w7_out[0][i];
    end
    endgenerate
+
+   // for the dense layers
+`include "dense_1.sv"
+`include "bnd1.sv"
+`include "dense_2.sv"
+`include "bnd2.sv"
+`include "dense_3.sv"
+
+   wire [1023:0] ts7_in;
+   assign ts7_in = bn7_out;
+   wire 	 ts7_vld;
+   wire [15:0] 	 ts7_out;
+   wire [D1_CH-1:0][15:0] d1_out;
+   wire 		  d1_vld;
+   reg [LOG2_D1_CYC-1:0]  d1_cntr;
+   wire [127:0][15:0] bnd1_out;
+   wire 	      bnd1_vld;
+   wire [2047:0] tsd1_in;
+   assign tsd1_in = bnd1_out;
+   wire 	 tsd1_vld;
+   wire [15:0] 	 tsd1_out;
+   wire [D2_CH-1:0][15:0] d2_out;
+   wire 		  d2_vld;
+   reg [LOG2_D2_CYC-1:0]  d2_cntr;
+   wire [127:0][15:0] 	  bnd2_out;
+   wire 		  bnd2_vld;
+   wire [2047:0] tsd2_in;
+   assign tsd2_in = bnd2_out;
+   wire 	 tsd2_vld;
+   wire [15:0] 	 tsd2_out;
+   wire [D3_CH-1:0][15:0] d3_out;
+   wire 		  d3_vld;
+   reg [LOG2_D3_CYC-1:0]  d3_cntr;
+   always @( posedge clk ) begin
+      if ( rst ) begin
+	 d1_cntr <= 0;
+	 d2_cntr <= 0;
+	 d3_cntr <= 0;
+      end else begin
+	 if ( ts7_vld ) begin
+	    d1_cntr <= d1_cntr + 1;
+	 end
+	 if ( tsd1_vld ) begin
+	    d2_cntr <= d2_cntr + 1;
+	 end
+	 if ( tsd2_vld ) begin
+	    d3_cntr <= d3_cntr + 1;
+	 end
+      end
+   end
 
 windower
 #(
@@ -614,8 +668,134 @@ bn_relu_fp
 .vld_out(bn7_vld),
 .data_out(bn7_out)
 );
+   
+// flatten to dense layer
+to_serial
+#(
+  .NO_CH(1),
+  .BW_IN(1024),
+  .BW_OUT(16)
+  ) ts7 (
+.clk(clk),
+.rst(rst),
+.vld_in(bn7_vld),
+.data_in(ts7_in),
+.vld_out(ts7_vld),
+.data_out(ts7_out)
+);
 
-   assign fser_vld = bn7_vld;
-   assign fser_out = bn7_out;
+dense_layer_fp
+#(
+  .INPUT_SIZE(1),
+  .NUM_CYC( D1_CYC ),
+  .BW(16),
+  .BW_W(2),
+  .OUTPUT_SIZE(D1_CH)
+) d1 (
+.clk(clk),
+.rst(rst),
+.vld_in(ts7_vld),
+.data_in(ts7_out),
+.w_vec( dw_1[d1_cntr] ),
+.vld_out(d1_vld),
+.data_out(d1_out)
+);
+
+bn_relu_fp
+#(
+  .NO_CH(128),
+  .BW(16),
+  .R_SHIFT(6)
+) bn_relu_d1 (
+.clk(clk),
+.rst(rst),
+.vld_in(d1_vld),
+.data_in(d1_out),
+.a(bnd1_a),
+.b(bnd1_b),
+.vld_out(bnd1_vld),
+.data_out(bnd1_out)
+);
+
+to_serial
+#(
+  .NO_CH(1),
+  .BW_IN(2048),
+  .BW_OUT(16)
+  ) tsd1 (
+.clk(clk),
+.rst(rst),
+.vld_in(bnd1_vld),
+.data_in(tsd1_in),
+.vld_out(tsd1_vld),
+.data_out(tsd1_out)
+);
+
+dense_layer_fp
+#(
+  .INPUT_SIZE(1),
+  .NUM_CYC( D2_CYC ),
+  .BW(16),
+  .BW_W(2),
+  .OUTPUT_SIZE(D2_CH)
+) d2 (
+.clk(clk),
+.rst(rst),
+.vld_in(tsd1_vld),
+.data_in(tsd1_out),
+.w_vec( dw_2[d2_cntr] ),
+.vld_out(d2_vld),
+.data_out(d2_out)
+);
+
+bn_relu_fp
+#(
+  .NO_CH(128),
+  .BW(16),
+  .R_SHIFT(6)
+) bn_relu_d2 (
+.clk(clk),
+.rst(rst),
+.vld_in(d2_vld),
+.data_in(d2_out),
+.a(bnd2_a),
+.b(bnd2_b),
+.vld_out(bnd2_vld),
+.data_out(bnd2_out)
+);
+
+to_serial
+#(
+  .NO_CH(1),
+  .BW_IN(2048),
+  .BW_OUT(16)
+  ) tsd2 (
+.clk(clk),
+.rst(rst),
+.vld_in(bnd2_vld),
+.data_in(tsd2_in),
+.vld_out(tsd2_vld),
+.data_out(tsd2_out)
+);
+
+dense_layer_fp
+#(
+  .INPUT_SIZE(1),
+  .NUM_CYC( D3_CYC ),
+  .BW(16),
+  .BW_W(16),
+  .OUTPUT_SIZE(D3_CH)
+) d3 (
+.clk(clk),
+.rst(rst),
+.vld_in(tsd2_vld),
+.data_in(tsd2_out),
+.w_vec( dw_3[d3_cntr] ),
+.vld_out(d3_vld),
+.data_out(d3_out)
+);
+
+   assign fser_vld = d3_vld;
+   assign fser_out = d3_out;
 
 endmodule
