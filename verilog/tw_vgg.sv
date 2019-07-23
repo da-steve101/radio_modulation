@@ -75,8 +75,7 @@ output [CH_OUT-1:0][15:0] data_out
    wire 	     mp1_vld, mp2_vld, mp3_vld, mp4_vld, mp5_vld, mp6_vld, mp7_vld;
 
    wire [63:0][15:0] c1_out;
-   wire [CH_OUT-1:0][15:0] fser_out;
-   wire 		   c1_vld, fser_vld;
+   wire 	     c1_vld;
    wire [63:0][7:0] ts1_out, c2_out;
    wire 	    ts1_vld, c2_vld;
    wire [63:0][3:0] ts2_out, c3_out;
@@ -109,10 +108,6 @@ output [CH_OUT-1:0][15:0] data_out
    end
    assign w6_vld_sel = w6_vld & (w6_cntr < 16);
    assign w7_vld_sel = w7_vld & (w7_cntr < 16);
-
-   // set the outputs
-   assign data_out = fser_out;
-   assign vld_out = fser_vld;
 
    // implement windows
    genvar 	    i;
@@ -795,7 +790,8 @@ dense_layer_fp
 .data_out(d3_out)
 );
 
-   assign fser_vld = d3_vld;
-   assign fser_out = d3_out;
+   // set the outputs
+   assign vld_out = d3_vld;
+   assign data_out = d3_out;
 
 endmodule

@@ -20,7 +20,7 @@ module windower
    // throughput = 2 => 5, 4
    // throughput = 4 => 9, 6
    // throughput = 8 => 17, 10
-   parameter NO_MEM = 2*THROUGHPUT;
+   localparam NO_MEM = 2*THROUGHPUT;
    reg [NO_CH-1:0]    window_mem [NO_MEM:0];
    reg [LOG2_IMG_SIZE-1:0] 	       cntr;
    reg 				       running;

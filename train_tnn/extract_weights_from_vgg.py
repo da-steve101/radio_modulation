@@ -108,11 +108,12 @@ if __name__ == "__main__":
         write_bn( sess, ops, lyr_name, act_prec, eta_r )
 
     kernel = [ op for op in ops if "dense_3/dense/kernel" in op.name and op.type == "VariableV2" ][0].outputs[0]
-    bias = [ op for op in ops if "dense_3/dense/bias" in op.name and op.type == "VariableV2" ][0].outputs[0]
-    kernel_r, bias_r = sess.run( [ kernel, bias ] )
+    # bias = [ op for op in ops if "dense_3/dense/bias" in op.name and op.type == "VariableV2" ][0].outputs[0]
+    kernel_r = sess.run( kernel )
+    kernel_r = np.round( kernel_r * ( 1 << 4 ) )/(1 << 4 )
+    # kernel_r, bias_r = sess.run( [ kernel, bias ] )
     f = open( "vgg_dense_3.csv", "w" )
     wrt = csv.writer( f )
-    wrt.writerow( bias_r )
     for k in kernel_r:
         wrt.writerow( k )
     f.close()
