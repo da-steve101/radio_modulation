@@ -21,6 +21,7 @@ def get_conv_layer( x, training, no_filt = 128, nu = None, act_prec = True ):
     tf.summary.histogram( "conv_filter_fp", conv_filter )
     conv_filter = q.trinarize( conv_filter, nu = nu  )
     cnn = tf.nn.conv1d( x, conv_filter, 1, padding = "SAME" )
+    cnn = tf.layers.max_pooling1d( cnn, 2, 2 )
     cnn = tf.layers.batch_normalization( cnn, training = training )
     tf.summary.histogram( "conv_dist", cnn )
     tf.summary.histogram( "conv_filter_tri", conv_filter )
@@ -28,7 +29,6 @@ def get_conv_layer( x, training, no_filt = 128, nu = None, act_prec = True ):
         cnn = q.shaped_relu( cnn, act_prec )
     else:
         cnn = tf.nn.relu( cnn )
-    cnn = tf.layers.max_pooling1d( cnn, 2, 2 )
     return cnn
 
 def get_net( x, training = False, use_SELU = False, act_prec = None, nu = None, no_filt = 64 ):

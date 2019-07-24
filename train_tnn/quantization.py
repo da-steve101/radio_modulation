@@ -1,13 +1,5 @@
 #! /usr/bin/python3
 
-'''
-Methods to train:
-
-A) Two stage training - train Q(weights) then Q(act)
-B) Slowly lowering precision
-C) Teacher student
-'''
-
 import tensorflow as tf
 
 def quantize( zr, k ):

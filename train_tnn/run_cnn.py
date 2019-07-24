@@ -81,7 +81,7 @@ def get_optimizer( pred, label, learning_rate, resnet_pred = None ):
     err = tf.reduce_sum( err )
     tf.summary.scalar( "train_err", err )
     if resnet_pred is not None:
-        student_err = tf.nn.l2_loss( resnet_pred - pred )
+        student_err = tf.sqrt( tf.nn.l2_loss( resnet_pred - pred ) )/5
         tf.summary.scalar( "student_err", student_err )
         err = student_err + err
     lr = tf.train.exponential_decay(
