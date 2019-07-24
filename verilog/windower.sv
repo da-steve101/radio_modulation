@@ -21,18 +21,19 @@ module windower
    // throughput = 4 => 9, 6
    // throughput = 8 => 17, 10
    localparam NO_MEM = 2*THROUGHPUT;
+   localparam L2_TPUT = $clog2( THROUGHPUT );
    reg [NO_CH-1:0]    window_mem [NO_MEM:0];
-   reg [LOG2_IMG_SIZE-1:0] 	       cntr;
-   reg 				       running;
-   reg [1:0] 			       img_fill; // count until window is filled after 2 inputs ( doesn't matter what the throughput is )
-   wire [LOG2_IMG_SIZE-1:0] 	       cntr_nxt;
-   wire [LOG2_IMG_SIZE-1:0] 	       cntr_filled;
-   wire 			       is_last;
-   wire 			       is_first;
-   wire [NO_CH-1:0] 		       pad_first [THROUGHPUT+1:0];
-   wire [NO_CH-1:0] 		       pad_last [THROUGHPUT+1:0];
-   wire [NO_CH-1:0]                    no_padding [THROUGHPUT+1:0];
-   wire [NO_CH-1:0] 		       zero;
+   reg [LOG2_IMG_SIZE-L2_TPUT-1:0] cntr;
+   reg 				   running;
+   reg [1:0] 			   img_fill; // count until window is filled after 2 inputs ( doesn't matter what the throughput is )
+   wire [LOG2_IMG_SIZE-L2_TPUT-1:0] cntr_nxt;
+   wire [LOG2_IMG_SIZE-L2_TPUT-1:0] cntr_filled;
+   wire 			    is_last;
+   wire 			    is_first;
+   wire [NO_CH-1:0] 		    pad_first [THROUGHPUT+1:0];
+   wire [NO_CH-1:0] 		    pad_last [THROUGHPUT+1:0];
+   wire [NO_CH-1:0] 		    no_padding [THROUGHPUT+1:0];
+   wire [NO_CH-1:0] 		    zero;
    assign zero = 0;
    assign cntr_nxt = cntr + 1;
    assign cntr_filled = cntr + 2;

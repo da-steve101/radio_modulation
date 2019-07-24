@@ -18,7 +18,7 @@ module maxpool
    output [NO_CH-1:0][BW_IN-1:0] data_out
 );
    // compute how many cycles needed for a compare
-   localparam integer BUF_CYC = 2 << ($clog2(BW_IN) - $clog2(SER_BW ));
+   localparam integer BUF_CYC = 1 << (1 + $clog2(BW_IN) - $clog2(SER_BW ));
    localparam integer DATA_SIZE = (BUF_CYC*SER_BW) >> 1;
    localparam integer BUF_SIZE = BUF_CYC*SER_BW;
    localparam integer CNTR_SIZE = $clog2( BUF_CYC );
@@ -27,7 +27,7 @@ module maxpool
    reg [NO_CH-1:0]		  max_flag;
    reg [NO_CH-1:0][BW_IN-1:0] 	  max_x;
    // need to wait until all valids from serial
-   reg [CNTR_SIZE-1:0] 		  cntr_vld;
+   reg [CNTR_SIZE:0] 		  cntr_vld;
    reg [LATENCY-1:0] 		  vld_sr;
    assign vld_out = vld_sr[LATENCY-1];
    assign data_out = max_x;
@@ -40,7 +40,6 @@ module maxpool
 	       if ( SER_BW == 2*BW_IN ) begin
 		  input_buffer[i] <= data_in[i];
 	       end else begin
-		  assert (SER_BW <= BW_IN) else $error( "SER_BW = %x must be either 2*BW_IN or <= BW_IN = %x", SER_BW, BW_IN );
 		  input_buffer[i] <= { data_in[i], input_buffer[i][(BUF_SIZE-1):SER_BW] };
 	       end
 	    end
