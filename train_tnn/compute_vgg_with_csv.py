@@ -148,6 +148,8 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument( "--model_name", type = str, required = True,
                          help="The model name to train or test")
+    parser.add_argument( "--results_name", type = str, required = True,
+                         help="The csv to output test results")
     parser.add_argument( "--dataset", type = str, nargs = "*",
                          help="The test rcrds to test against")
     parser.add_argument("--twn_incr_act", type=int, default = -1, help =
@@ -165,6 +167,8 @@ Will binaraize the last conv layer and the dense layers""" )
                          help = "number of iter to run, -1 => all" )
     parser.add_argument( "--wr_files", action='store_true',
                          help = "write files stages" )
+    parser.add_argument( "--show_progress", action='store_true',
+                         help = "show progress in test set" )
     parser.add_argument( "--gpus", type=str, default = "",
                          help = "GPUs to use" )
     return parser.parse_args()
@@ -177,13 +181,16 @@ if __name__ == "__main__":
         sess = tf.Session()
         cntr_ary = {}
         correct_ary = {}
-        f = open( args.model_name + "_results.csv", "w" )
+        f = open( args.results_name, "w" )
         wrt = csv.writer( f )
         try:
             nIter = 410*24*len(args.dataset)
             if args.run_only > -1:
                 nIter = args.run_only
-            for i in tqdm.tqdm( range( nIter ) ):
+            iterator = range( nIter )
+            if args.show_progress:
+                iterator = tqdm.tqdm( iterator )
+            for i in iterator:
                 x_in, y, z = sess.run( [ signal, label, snr ] )
                 if args.wr_files:
                     img = x_in

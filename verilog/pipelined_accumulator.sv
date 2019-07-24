@@ -13,7 +13,7 @@ module pipelined_accumulator
 );
 
 localparam INCR_BW = ( IN_BITWIDTH < OUT_BITWIDTH ) ? IN_BITWIDTH + 1 : IN_BITWIDTH;
-   
+
 genvar i;
 generate
 if ( LOG2_NO_IN <= 0 ) begin
