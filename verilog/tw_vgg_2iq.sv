@@ -5,7 +5,7 @@ module tw_vgg_2iq
   parameter BW = 16,
   parameter L2_IMG = 10,
   parameter R_SHIFT = 8,
-  parameter CH_OUT = 64
+  parameter CH_OUT = 24
 ) (
 input clk,
 input rst,
