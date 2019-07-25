@@ -32,7 +32,7 @@ module bn_relu_fp
 	 assign data_out[i] = relu_i;
 	 always @( posedge clk ) begin
 	    mult_i <= $signed(a[i])*$signed(data_in[i]);
-	    bias_i <= mult_i + $signed(b[i] << 4);
+	    bias_i <= $signed(mult_i) + $signed(b[i]);
 	    shift_i <= bias_i[BW+R_SHIFT-1:R_SHIFT];
 	    if ( shift_i > 0 ) begin
 	       relu_i <= shift_i;
