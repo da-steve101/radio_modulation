@@ -39,7 +39,7 @@ module tw_vgg_2iq_test();
    wire [CNTR_BW_IN-1:0] 	 in_cntr_a, in_cntr_b;
    assign in_cntr_a = in_cntr << 1;
    assign in_cntr_b = in_cntr_a + 1;
-   
+
 always @( posedge clk ) begin
    data_in[3:2] <= signal_in[in_cntr_a];
    data_in[1:0] <= signal_in[in_cntr_b];
@@ -66,6 +66,9 @@ end
 
 tw_vgg_2iq
 #(
+  .BW(BW_IN),
+  .L2_IMG(10),
+  .R_SHIFT(8),
   .CH_OUT(CH_OUT)
 ) dut (
 .clk(clk),

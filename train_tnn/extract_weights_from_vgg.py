@@ -49,7 +49,6 @@ def get_bn_vars( sess, ops, lyr_name ):
 
 def write_bn( sess, ops, lyr_name, act_prec, eta_r ):
     mean, var, gamma, beta = get_bn_vars( sess, ops, lyr_name )
-    print( act_prec )
     if act_prec is None:
         abvars = twn.get_AB( mean, var, gamma, beta, eta_r )
     else:
@@ -97,7 +96,6 @@ if __name__ == "__main__":
         conv_filter = get_conv_filter( ops, lyr_idx )
         lyr_name = "lyr" + str(lyr_idx)
         eta_r = decode_twn( sess, conv_filter, nu[lyr_idx-1], "vgg_conv_" + lyr_name + ".csv" )
-        print( eta_r )
         write_bn( sess, ops, lyr_name, act_prec, eta_r )
 
     # do the dense layers

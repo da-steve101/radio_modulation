@@ -6,6 +6,7 @@ module dense_layer_fp
   parameter NUM_CYC = 512,
   parameter BW = 16,
   parameter BW_W = 16,
+  parameter R_SHIFT = 0,
   parameter OUTPUT_SIZE = 128
 ) (
    input 					clk,
@@ -42,12 +43,12 @@ module dense_layer_fp
 	 wire [BW-1:0] tmp_out;
 	 wire [INPUT_SIZE-1:0][BW_W-1:0] w_or_zero;
 	 assign w_or_zero = vld_in ? w_vec[i*INPUT_SIZE +: INPUT_SIZE] : 0;
-	 
 	 multiply_accumulate_fp
 	   #(
 	     .LOG2_NO_VECS( LOG2_NO_VECS ),
 	     .BW(BW),
 	     .BW_W(BW_W),
+	     .R_SHIFT(R_SHIFT),
 	     .NUM_CYC( NUM_CYC )
 	     ) mac (
 		.clk(clk),

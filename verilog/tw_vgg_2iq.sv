@@ -2,14 +2,17 @@
 
 module tw_vgg_2iq
 #(
+  parameter BW = 16,
+  parameter L2_IMG = 10,
+  parameter R_SHIFT = 8,
   parameter CH_OUT = 64
 ) (
 input clk,
 input rst,
 input vld_in,
-input [3:0][15:0] data_in,
+input [3:0][BW-1:0] data_in,
 output vld_out,
-output [CH_OUT-1:0][15:0] data_out
+output [CH_OUT-1:0][BW-1:0] data_out
 );
 
 `include "bn1.sv"
@@ -21,77 +24,107 @@ output [CH_OUT-1:0][15:0] data_out
 `include "bn7.sv"
 
    // window lyr 1
-   wire [31:0] 	    w1_in [1:0];
+   localparam W1L2 = $clog2( BW ) + 1;
+   localparam W1_BW = 1 << W1L2;
+   wire [W1_BW-1:0] 	    w1_in [1:0];
    assign w1_in[1] = data_in[3:2];
    assign w1_in[0] = data_in[1:0];
-   wire [31:0] 	    w1_out [3:0];
+   wire [W1_BW-1:0] 	    w1_out [3:0];
    wire 	    w1_vld;
-   wire [7:0][15:0] window_c1;
+   wire [7:0][BW-1:0] window_c1;
 
    // window lyr 2
-   wire 	    w2_vld;
-   wire [1023:0]    w2_in [0:0];
-   wire [1023:0]     w2_out [2:0];
-   wire [191:0][15:0] window_c2;
+   localparam W2L2 = $clog2( BW );
+   localparam W2_BW = 1 << W2L2;
+   localparam W2_CH = BN1_CH << $clog2( W2_BW );
+   wire 	      w2_vld;
+   wire [W2_CH-1:0]   w2_in [0:0];
+   wire [W2_CH-1:0]   w2_out [2:0];
+   wire [3*BN1_CH-1:0][W2_BW-1:0] window_c2;
    wire c2_ser_rst;
 
    // window lyr 3
+   localparam W3_SC_L2 = 1; // number of serial cycles for adders
+   localparam W3L2 = $clog2( BW ) - W3_SC_L2 < 0 ? 0 : $clog2( BW ) - W3_SC_L2;
+   localparam W3_BW = 1 << W3L2;
+   localparam W3_CH = BN2_CH << $clog2( W3_BW );
    wire w3_vld;
-   wire [511:0]     w3_in;
-   wire [511:0]     w3_out [2:0];
-   wire [191:0][7:0] window_c3;
+   wire [W3_CH-1:0]     w3_in;
+   wire [W3_CH-1:0]     w3_out [2:0];
+   wire [3*BN2_CH-1:0][W3_BW-1:0] window_c3;
    wire c3_ser_rst;
 
    // window lyr 4
+   localparam W4_SC_L2 = 2;
+   localparam W4L2 = $clog2( BW ) - W4_SC_L2 < 0 ? 0 : $clog2( BW ) - W4_SC_L2;
+   localparam W4_BW = 1 << W4L2;
+   localparam W4_CH = BN3_CH << $clog2( W4_BW );
    wire w4_vld;
-   wire [255:0]     w4_in;
-   wire [255:0]     w4_out [2:0];
-   wire [191:0][3:0] window_c4;
+   wire [W4_CH-1:0]     w4_in;
+   wire [W4_CH-1:0]     w4_out [2:0];
+   wire [3*BN3_CH-1:0][W4_BW-1:0] window_c4;
    wire c4_ser_rst;
 
    // window lyr 5
+   localparam W5_SC_L2 = 3;
+   localparam W5L2 = $clog2( BW ) - W5_SC_L2 < 0 ? 0 : $clog2( BW ) - W5_SC_L2;
+   localparam W5_BW = 1 << W5L2;
+   localparam W5_CH = BN4_CH << $clog2( W5_BW );
    wire w5_vld;
-   wire [127:0]     w5_in;
-   wire [127:0]     w5_out [2:0];
-   wire [191:0][1:0] window_c5;
+   wire [W5_CH-1:0]     w5_in;
+   wire [W5_CH-1:0]     w5_out [2:0];
+   wire [3*BN4_CH-1:0][W5_BW-1:0] window_c5;
    wire c5_ser_rst;
 
    // window lyr 6
+   localparam W6_SC_L2 = 4;
+   localparam W6L2 = $clog2( BW ) - W6_SC_L2 < 0 ? 0 : $clog2( BW ) - W6_SC_L2;
+   localparam W6_BW = 1 << W6L2;
+   localparam W6_CH = BN5_CH << $clog2( W6_BW );
    wire w6_vld;
-   wire [63:0]     w6_in;
-   wire [63:0]     w6_out [2:0];
-   wire [191:0]    window_c6;
+   wire [W6_CH-1:0]     w6_in;
+   wire [W6_CH-1:0]     w6_out [2:0];
+   wire [3*BN5_CH-1:0][W6_BW-1:0] window_c6;
    wire c6_ser_rst;
 
    // window lyr 7
+   localparam W7_SC_L2 = 5;
+   localparam W7L2 = $clog2( BW ) - W7_SC_L2 < 0 ? 0 : $clog2( BW ) - W7_SC_L2;
+   localparam W7_BW = 1 << W6L2;
+   localparam W7_CH = BN6_CH << $clog2( W7_BW );
    wire w7_vld;
-   wire [63:0]     w7_in;
-   wire [63:0]     w7_out [2:0];
-   wire [191:0]    window_c7;
+   wire [W7_CH-1:0]     w7_in;
+   wire [W7_CH-1:0]     w7_out [2:0];
+   wire [3*BN6_CH-1:0][W6_BW-1:0] window_c7;
    wire c7_ser_rst;
 
-   wire [63:0][15:0] bn1_out, bn2_out, bn3_out, bn4_out, bn5_out, bn6_out, bn7_out;
+   wire [BN1_CH-1:0][BW-1:0] bn1_out, mp1_out;
+   wire [BN2_CH-1:0][BW-1:0] bn2_out, mp2_out;
+   wire [BN3_CH-1:0][BW-1:0] bn3_out, mp3_out;
+   wire [BN4_CH-1:0][BW-1:0] bn4_out, mp4_out;
+   wire [BN5_CH-1:0][BW-1:0] bn5_out, mp5_out;
+   wire [BN6_CH-1:0][BW-1:0] bn6_out, mp6_out;
+   wire [BN7_CH-1:0][BW-1:0] bn7_out, mp7_out;
    wire 	     bn1_vld, bn2_vld, bn3_vld, bn4_vld, bn5_vld, bn6_vld, bn7_vld;
-   wire [63:0][15:0] mp1_out, mp2_out, mp3_out, mp4_out, mp5_out, mp6_out, mp7_out;
    wire 	     mp1_vld, mp2_vld, mp3_vld, mp4_vld, mp5_vld, mp6_vld, mp7_vld;
-   wire [63:0][31:0] mp1_in;
-   wire [63:0][15:0] c1_A_out, c1_B_out;
-   wire 	     c1_A_vld, c1_B_vld;
-   wire [63:0][15:0] c2_out;
-   wire 	     c2_vld;
-   wire [63:0][7:0]  ts2_out, c3_out;
-   wire 	     ts2_vld, c3_vld;
-   wire [63:0][3:0]  ts3_out, c4_out;
-   wire 	     ts3_vld, c4_vld;
-   wire [63:0][1:0]  ts4_out, c5_out;
-   wire 	     ts4_vld, c5_vld;
-   wire [63:0] 	     ts5_out, c6_out, ts6_out, c7_out;
-   wire 	     ts5_vld, c6_vld, ts6_vld, c7_vld;
+   wire [BN1_CH-1:0][W1_BW-1:0] mp1_in;
+   wire [BN1_CH-1:0][BW-1:0] c1_A_out, c1_B_out;
+   wire 		     c1_A_vld, c1_B_vld;
+   wire [BN2_CH-1:0][W2_BW-1:0] c2_out;
+   wire 			c2_vld;
+   wire [BN3_CH-1:0][W3_BW-1:0]  ts2_out, c3_out;
+   wire 			 ts2_vld, c3_vld;
+   wire [BN4_CH-1:0][W4_BW-1:0]  ts3_out, c4_out;
+   wire 			 ts3_vld, c4_vld;
+   wire [BN5_CH-1:0][W5_BW-1:0]  ts4_out, c5_out;
+   wire 			 ts4_vld, c5_vld;
+   wire [BN6_CH-1:0][W6_BW-1:0]  ts5_out, c6_out, ts6_out, c7_out;
+   wire 			 ts5_vld, c6_vld, ts6_vld, c7_vld;
 
    // some hackery for when throughput is too low
-   wire [63:0][31:0] ts6_in;
+   wire [BN7_CH-1:0][31:0] ts6_in;
    wire 	     ts6_in_vld, w7_vld_sel;
-   reg [4:0] 	     w7_cntr;
+   reg [W7_SC_L2-1:0] w7_cntr;
 
    always @( posedge clk ) begin
       if ( rst ) begin
@@ -102,7 +135,7 @@ output [CH_OUT-1:0][15:0] data_out
 	 end
       end
    end
-   assign w7_vld_sel = w7_vld & (w7_cntr < 16);
+   assign w7_vld_sel = w7_vld & (w7_cntr < BW);
 
    // implement windows
    genvar 	    i;
@@ -115,36 +148,36 @@ output [CH_OUT-1:0][15:0] data_out
    for ( i = 0; i < 64; i++ ) begin
       assign mp1_in[i] = { c1_A_out[i], c1_B_out[i] };
       // lyr2
-      assign w2_in[0][i*16 +: 16] = bn1_out[i];
-      assign window_c2[i] = w2_out[2][16*i +: 16];
-      assign window_c2[i + 64] = w2_out[1][16*i +: 16];
-      assign window_c2[i + 128] = w2_out[0][16*i +: 16];
+      assign w2_in[0][i*W2_BW +: W2_BW] = bn1_out[i];
+      assign window_c2[i] = w2_out[2][W2_BW*i +: W2_BW];
+      assign window_c2[i + 64] = w2_out[1][W2_BW*i +: W2_BW];
+      assign window_c2[i + 128] = w2_out[0][W2_BW*i +: W2_BW];
       // lyr3
-      assign w3_in[i*8 +: 8] = ts2_out[i];
-      assign window_c3[i] = w3_out[2][8*i +: 8];
-      assign window_c3[i + 64] = w3_out[1][8*i +: 8];
-      assign window_c3[i + 128] = w3_out[0][8*i +: 8];
+      assign w3_in[i*W3_BW +: W3_BW] = ts2_out[i];
+      assign window_c3[i] = w3_out[2][W3_BW*i +: W3_BW];
+      assign window_c3[i + 64] = w3_out[1][W3_BW*i +: W3_BW];
+      assign window_c3[i + 128] = w3_out[0][W3_BW*i +: W3_BW];
       // lyr4
-      assign w4_in[i*4 +: 4] = ts3_out[i];
-      assign window_c4[i] = w4_out[2][4*i +: 4];
-      assign window_c4[i + 64] = w4_out[1][4*i +: 4];
-      assign window_c4[i + 128] = w4_out[0][4*i +: 4];
+      assign w4_in[i*W4_BW +: W4_BW] = ts3_out[i];
+      assign window_c4[i] = w4_out[2][W4_BW*i +: W4_BW];
+      assign window_c4[i + 64] = w4_out[1][W4_BW*i +: W4_BW];
+      assign window_c4[i + 128] = w4_out[0][W4_BW*i +: W4_BW];
       // lyr5
-      assign w5_in[i*2 +: 2] = ts4_out[i];
-      assign window_c5[i] = w5_out[2][i*2 +: 2];
-      assign window_c5[i + 64] = w5_out[1][i*2 +: 2];
-      assign window_c5[i + 128] = w5_out[0][i*2 +: 2];
+      assign w5_in[i*W5_BW +: W5_BW] = ts4_out[i];
+      assign window_c5[i] = w5_out[2][i*W5_BW +: W5_BW];
+      assign window_c5[i + 64] = w5_out[1][i*W5_BW +: W5_BW];
+      assign window_c5[i + 128] = w5_out[0][i*W5_BW +: W5_BW];
       // lyr6
-      assign w6_in[i] = ts5_out[i];
-      assign window_c6[i] = w6_out[2][i];
-      assign window_c6[i + 64] = w6_out[1][i];
-      assign window_c6[i + 128] = w6_out[0][i];
+      assign w6_in[i*W6_BW +: W6_BW] = ts5_out[i];
+      assign window_c6[i] = w6_out[2][i*W6_BW +: W6_BW];
+      assign window_c6[i + 64] = w6_out[1][i*W6_BW +: W6_BW];
+      assign window_c6[i + 128] = w6_out[0][i*W6_BW +: W6_BW];
       // lyr7
       assign ts6_in[i] = { 16'h0, bn6_out[i] };
-      assign w7_in[i] = ts6_out[i];
-      assign window_c7[i] = w7_out[2][i];
-      assign window_c7[i + 64] = w7_out[1][i];
-      assign window_c7[i + 128] = w7_out[0][i];
+      assign w7_in[i*W7_BW +: W7_BW] = ts6_out[i];
+      assign window_c7[i] = w7_out[2][i*W7_BW +: W7_BW];
+      assign window_c7[i + 64] = w7_out[1][i*W7_BW +: W7_BW];
+      assign window_c7[i + 128] = w7_out[0][i*W7_BW +: W7_BW];
    end
    endgenerate
 
@@ -155,29 +188,29 @@ output [CH_OUT-1:0][15:0] data_out
 `include "bnd2.sv"
 `include "dense_3.sv"
 
-   wire [1023:0] ts7_in;
+   wire [BN7_CH*BW-1:0] ts7_in;
    assign ts7_in = bn7_out;
-   wire 	 ts7_vld;
-   wire [15:0] 	 ts7_out;
-   wire [D1_CH-1:0][15:0] d1_out;
-   wire 		  d1_vld;
-   reg [LOG2_D1_CYC-1:0]  d1_cntr;
-   wire [127:0][15:0] bnd1_out;
-   wire 	      bnd1_vld;
-   wire [2047:0] tsd1_in;
+   wire 		ts7_vld;
+   wire [BW-1:0] 	ts7_out;
+   wire [D1_CH-1:0][BW-1:0] d1_out;
+   wire 		    d1_vld;
+   reg [LOG2_D1_CYC-1:0]    d1_cntr;
+   wire [BND1_CH-1:0][BW-1:0] bnd1_out;
+   wire 		      bnd1_vld;
+   wire [BND1_CH*BW-1:0]      tsd1_in;
    assign tsd1_in = bnd1_out;
-   wire 	 tsd1_vld;
-   wire [15:0] 	 tsd1_out;
-   wire [D2_CH-1:0][15:0] d2_out;
-   wire 		  d2_vld;
-   reg [LOG2_D2_CYC-1:0]  d2_cntr;
-   wire [127:0][15:0] 	  bnd2_out;
-   wire 		  bnd2_vld;
-   wire [2047:0] tsd2_in;
+   wire 		      tsd1_vld;
+   wire [BW-1:0] 	      tsd1_out;
+   wire [D2_CH-1:0][BW-1:0]   d2_out;
+   wire 		      d2_vld;
+   reg [LOG2_D2_CYC-1:0]      d2_cntr;
+   wire [BND2_CH-1:0][BW-1:0] bnd2_out;
+   wire 		      bnd2_vld;
+   wire [BND2_CH*BW-1:0]      tsd2_in;
    assign tsd2_in = bnd2_out;
-   wire 	 tsd2_vld;
-   wire [15:0] 	 tsd2_out;
-   wire [D3_CH-1:0][15:0] d3_out;
+   wire 		      tsd2_vld;
+   wire [BW-1:0] 	      tsd2_out;
+   wire [D3_CH-1:0][BW-1:0]   d3_out;
    wire 		  d3_vld;
    reg [LOG2_D3_CYC-1:0]  d3_cntr;
    always @( posedge clk ) begin
@@ -204,8 +237,8 @@ output [CH_OUT-1:0][15:0] data_out
 
 windower
 #(
-  .NO_CH(32),
-  .LOG2_IMG_SIZE(10),
+  .NO_CH(W1_BW),
+  .LOG2_IMG_SIZE(L2_IMG),
   .THROUGHPUT(2)
 ) w1 (
 .clk(clk),
@@ -236,9 +269,9 @@ conv1 c1_B (
 
 maxpool
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .SER_BW(32)
+  .NO_CH(BN1_CH),
+  .BW_IN(BW),
+  .SER_BW(W1_BW)
 ) mp1 (
 .clk(clk),
 .rst(rst),
@@ -250,9 +283,9 @@ maxpool
 
 bn_relu_fp
 #(
-  .NO_CH(64),
-  .BW(16),
-  .R_SHIFT(6)
+  .NO_CH(BN1_CH),
+  .BW(BW),
+  .R_SHIFT(R_SHIFT)
 ) bn_relu1 (
 .clk(clk),
 .rst(rst),
@@ -266,8 +299,8 @@ bn_relu_fp
 
 windower
 #(
-  .NO_CH(64*16),
-  .LOG2_IMG_SIZE(9),
+  .NO_CH(W2_CH),
+  .LOG2_IMG_SIZE(L2_IMG-1),
   .THROUGHPUT(1)
 ) w2 (
 .clk(clk),
@@ -289,9 +322,9 @@ conv2 c2 (
 
 maxpool
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .SER_BW(16)
+  .NO_CH(BN2_CH),
+  .BW_IN(BW),
+  .SER_BW(W2_BW)
 ) mp2 (
 .clk(clk),
 .rst(rst),
@@ -303,9 +336,9 @@ maxpool
 
 bn_relu_fp
 #(
-  .NO_CH(64),
-  .BW(16),
-  .R_SHIFT(6)
+  .NO_CH(BN2_CH),
+  .BW(BW),
+  .R_SHIFT(R_SHIFT)
 ) bn_relu2 (
 .clk(clk),
 .rst(rst),
@@ -319,9 +352,9 @@ bn_relu_fp
 
 to_serial
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .BW_OUT(8)
+  .NO_CH(BN2_CH),
+  .BW_IN(BW),
+  .BW_OUT(W3_BW)
   ) ts2 (
 .clk(clk),
 .rst(rst),
@@ -333,9 +366,9 @@ to_serial
 
 windower_serial
 #(
-  .NO_CH(64*8),
-  .LOG2_IMG_SIZE(8),
-  .SER_CYC(2)
+  .NO_CH(W3_CH),
+  .LOG2_IMG_SIZE(L2_IMG-2),
+  .SER_CYC(1 << W3_SC_L2)
 ) w3 (
 .clk(clk),
 .rst(rst),
@@ -357,9 +390,9 @@ conv3 c3 (
 
 maxpool
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .SER_BW(8)
+  .NO_CH(BN3_CH),
+  .BW_IN(BW),
+  .SER_BW(W3_BW)
 ) mp3 (
 .clk(clk),
 .rst(rst),
@@ -371,9 +404,9 @@ maxpool
 
 bn_relu_fp
 #(
-  .NO_CH(64),
-  .BW(16),
-  .R_SHIFT(6)
+  .NO_CH(BN3_CH),
+  .BW(BW),
+  .R_SHIFT(R_SHIFT)
 ) bn_relu3 (
 .clk(clk),
 .rst(rst),
@@ -387,9 +420,9 @@ bn_relu_fp
 
 to_serial
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .BW_OUT(4)
+  .NO_CH(BN3_CH),
+  .BW_IN(BW),
+  .BW_OUT(W4_BW)
   ) ts3 (
 .clk(clk),
 .rst(rst),
@@ -401,9 +434,9 @@ to_serial
 
 windower_serial
 #(
-  .NO_CH(64*4),
-  .LOG2_IMG_SIZE(7),
-  .SER_CYC(4)
+  .NO_CH(W4_CH),
+  .LOG2_IMG_SIZE(L2_IMG-3),
+  .SER_CYC(1 << W4_SC_L2)
 ) w4 (
 .clk(clk),
 .rst(rst),
@@ -425,9 +458,9 @@ conv4 c4 (
 
 maxpool
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .SER_BW(4)
+  .NO_CH(BN4_CH),
+  .BW_IN(BW),
+  .SER_BW(W4_BW)
 ) mp4 (
 .clk(clk),
 .rst(rst),
@@ -439,9 +472,9 @@ maxpool
 
 bn_relu_fp
 #(
-  .NO_CH(64),
-  .BW(16),
-  .R_SHIFT(6)
+  .NO_CH(BN4_CH),
+  .BW(BW),
+  .R_SHIFT(R_SHIFT)
 ) bn_relu4 (
 .clk(clk),
 .rst(rst),
@@ -455,9 +488,9 @@ bn_relu_fp
 
 to_serial
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .BW_OUT(2)
+  .NO_CH(BN4_CH),
+  .BW_IN(BW),
+  .BW_OUT(W5_BW)
   ) ts4 (
 .clk(clk),
 .rst(rst),
@@ -469,9 +502,9 @@ to_serial
 
 windower_serial
 #(
-  .NO_CH(64*2),
-  .LOG2_IMG_SIZE(6),
-  .SER_CYC(8)
+  .NO_CH(W5_CH),
+  .LOG2_IMG_SIZE(L2_IMG-4),
+  .SER_CYC(1 << W5_SC_L2)
 ) w5 (
 .clk(clk),
 .rst(rst),
@@ -493,9 +526,9 @@ conv5 c5 (
 
 maxpool
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .SER_BW(2)
+  .NO_CH(BN5_CH),
+  .BW_IN(BW),
+  .SER_BW(W5_BW)
 ) mp5 (
 .clk(clk),
 .rst(rst),
@@ -507,9 +540,9 @@ maxpool
 
 bn_relu_fp
 #(
-  .NO_CH(64),
-  .BW(16),
-  .R_SHIFT(6)
+  .NO_CH(BN5_CH),
+  .BW(BW),
+  .R_SHIFT(R_SHIFT)
 ) bn_relu5 (
 .clk(clk),
 .rst(rst),
@@ -523,9 +556,9 @@ bn_relu_fp
 
 to_serial
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .BW_OUT(1)
+  .NO_CH(BN5_CH),
+  .BW_IN(BW),
+  .BW_OUT(W6_BW)
   ) ts5 (
 .clk(clk),
 .rst(rst),
@@ -537,9 +570,9 @@ to_serial
 
 windower_serial
 #(
-  .NO_CH(64),
-  .LOG2_IMG_SIZE(5),
-  .SER_CYC(16)
+  .NO_CH(W6_CH),
+  .LOG2_IMG_SIZE(L2_IMG-5),
+  .SER_CYC(1 << W6_SC_L2)
 ) w6 (
 .clk(clk),
 .rst(rst),
@@ -561,9 +594,9 @@ conv6 c6 (
 
 maxpool
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .SER_BW(1)
+  .NO_CH(BN6_CH),
+  .BW_IN(BW),
+  .SER_BW(W6_BW)
 ) mp6 (
 .clk(clk),
 .rst(rst),
@@ -575,9 +608,9 @@ maxpool
 
 bn_relu_fp
 #(
-  .NO_CH(64),
-  .BW(16),
-  .R_SHIFT(6)
+  .NO_CH(BN6_CH),
+  .BW(BW),
+  .R_SHIFT(R_SHIFT)
 ) bn_relu6 (
 .clk(clk),
 .rst(rst),
@@ -591,9 +624,9 @@ bn_relu_fp
 
 to_serial
 #(
-  .NO_CH(64),
-  .BW_IN(32),
-  .BW_OUT(1)
+  .NO_CH(BN6_CH),
+  .BW_IN(2*BW),
+  .BW_OUT(W7_BW)
   ) ts6 (
 .clk(clk),
 .rst(rst),
@@ -605,9 +638,9 @@ to_serial
 
 windower_serial
 #(
-  .NO_CH(64),
-  .LOG2_IMG_SIZE(4),
-  .SER_CYC(32)
+  .NO_CH(W7_CH),
+  .LOG2_IMG_SIZE(L2_IMG-6),
+  .SER_CYC(1 << W7_SC_L2)
 ) w7 (
 .clk(clk),
 .rst(rst),
@@ -629,9 +662,9 @@ conv7 c7 (
 
 maxpool
 #(
-  .NO_CH(64),
-  .BW_IN(16),
-  .SER_BW(1)
+  .NO_CH(BN7_CH),
+  .BW_IN(BW),
+  .SER_BW(W7_BW)
 ) mp7 (
 .clk(clk),
 .rst(rst),
@@ -643,9 +676,9 @@ maxpool
 
 bn_relu_fp
 #(
-  .NO_CH(64),
-  .BW(16),
-  .R_SHIFT(6)
+  .NO_CH(BN7_CH),
+  .BW(BW),
+  .R_SHIFT(R_SHIFT)
 ) bn_relu7 (
 .clk(clk),
 .rst(rst),
@@ -661,8 +694,8 @@ bn_relu_fp
 to_serial
 #(
   .NO_CH(1),
-  .BW_IN(1024),
-  .BW_OUT(16)
+  .BW_IN(BN7_CH*BW),
+  .BW_OUT(BW)
   ) ts7 (
 .clk(clk),
 .rst(rst),
@@ -674,10 +707,11 @@ to_serial
 
 dense_layer_fp
 #(
-  .INPUT_SIZE(1),
+  .INPUT_SIZE(D1_IN_SIZE),
   .NUM_CYC( D1_CYC ),
-  .BW(16),
-  .BW_W(2),
+  .BW(BW),
+  .BW_W(D1_BW_W),
+  .R_SHIFT(D1_SHIFT),
   .OUTPUT_SIZE(D1_CH)
 ) d1 (
 .clk(clk),
@@ -691,9 +725,9 @@ dense_layer_fp
 
 bn_relu_fp
 #(
-  .NO_CH(128),
-  .BW(16),
-  .R_SHIFT(6)
+  .NO_CH(D1_CH),
+  .BW(BW),
+  .R_SHIFT(R_SHIFT)
 ) bn_relu_d1 (
 .clk(clk),
 .rst(rst),
@@ -708,8 +742,8 @@ bn_relu_fp
 to_serial
 #(
   .NO_CH(1),
-  .BW_IN(2048),
-  .BW_OUT(16)
+  .BW_IN(D1_CH*BW),
+  .BW_OUT(BW)
   ) tsd1 (
 .clk(clk),
 .rst(rst),
@@ -721,10 +755,11 @@ to_serial
 
 dense_layer_fp
 #(
-  .INPUT_SIZE(1),
+  .INPUT_SIZE(D2_IN_SIZE),
   .NUM_CYC( D2_CYC ),
-  .BW(16),
-  .BW_W(2),
+  .BW(BW),
+  .BW_W(D2_BW_W),
+  .R_SHIFT(D2_SHIFT),
   .OUTPUT_SIZE(D2_CH)
 ) d2 (
 .clk(clk),
@@ -738,9 +773,9 @@ dense_layer_fp
 
 bn_relu_fp
 #(
-  .NO_CH(128),
-  .BW(16),
-  .R_SHIFT(6)
+  .NO_CH(D2_CH),
+  .BW(BW),
+  .R_SHIFT(R_SHIFT)
 ) bn_relu_d2 (
 .clk(clk),
 .rst(rst),
@@ -755,8 +790,8 @@ bn_relu_fp
 to_serial
 #(
   .NO_CH(1),
-  .BW_IN(2048),
-  .BW_OUT(16)
+  .BW_IN(D2_CH*BW),
+  .BW_OUT(BW)
   ) tsd2 (
 .clk(clk),
 .rst(rst),
@@ -768,10 +803,11 @@ to_serial
 
 dense_layer_fp
 #(
-  .INPUT_SIZE(1),
+  .INPUT_SIZE(D3_IN_SIZE),
   .NUM_CYC( D3_CYC ),
-  .BW(16),
-  .BW_W(16),
+  .BW(BW),
+  .BW_W(D3_BW_W),
+  .R_SHIFT(D3_SHIFT),
   .OUTPUT_SIZE(D3_CH)
 ) d3 (
 .clk(clk),

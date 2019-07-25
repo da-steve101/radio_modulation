@@ -85,7 +85,10 @@ def round_to( img, prec ):
     return np.round( img * ( 1 << prec ) )/( 1 << prec )
 
 def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = False ):
-    img = x_in[0]
+    img = x_in
+    mean = np.mean(img, axis=0)
+    img = ( img - mean )
+    img = round_to( img, args.prec )
     for i in range(1,8):
         conv_weights = rd_tri_weights_file( model_dir + "/vgg_conv_lyr" + str(i) + ".csv" )
         conv_weights = np.reshape( conv_weights, [ 3, -1, no_filt ] )
@@ -114,9 +117,11 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
         if wr_files:
             wr_img( [img], model_dir + "/dense_bn_relu_img_lyr" + str(i) + ".csv" )
     dense_weights = rd_fp_weights_file( model_dir + "/vgg_dense_3.csv" )
+    dense_weights = round_to( dense_weights, prec )
     if dense_weights.shape[0] != 128: # remove bias row if included
         dense_weights = dense_weights[1:,:]
     img = np.matmul( img, dense_weights )
+    img = floor_to( img, prec )
     if wr_files:
         wr_img( [img], model_dir + "/pred_output.csv" )
     return img
@@ -193,13 +198,9 @@ if __name__ == "__main__":
                 iterator = tqdm.tqdm( iterator )
             for i in iterator:
                 x_in, y, z = sess.run( [ signal, label, snr ] )
-                img = x_in
-                mean = np.mean(img, axis=0)
-                img = ( img - mean )
-                img = round_to( img, args.prec )
                 if args.wr_files:
-                    wr_img( img, args.model_name + "/input_img.csv")
-                np_pred = compute_network( args.model_name, [img], args.no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files )
+                    wr_img( x_in, args.model_name + "/input_img.csv")
+                np_pred = compute_network( args.model_name, x_in, args.no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files )
                 preds = np.argmax( np_pred )
                 if z not in cntr_ary:
                     cntr_ary[z] = 0
@@ -218,11 +219,7 @@ if __name__ == "__main__":
             x_in = rd_fp_weights_file( args.model_name + "/input_img.csv" )
         else:
             x_in = np.random.normal( 0, 1, [1024,2] ).astype( np.float32 )
-            mean = np.mean(img, axis=0)
-            img = ( img - mean )
-            img = round_to( img, args.prec )
-        x_in = np.array([ x_in ])
-        tf_pred = run_tf_version( args.model_name, x_in, args.nu_conv, args.nu_dense, args.no_filt, args.twn_incr_act )
+        tf_pred = run_tf_version( args.model_name, [x_in], args.nu_conv, args.nu_dense, args.no_filt, args.twn_incr_act )
         np_pred = compute_network( args.model_name, x_in, args.no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files )
         print( "tf_pred = ", tf_pred, tf_pred.shape )
         print( "np_pred = ", np_pred, np_pred.shape )

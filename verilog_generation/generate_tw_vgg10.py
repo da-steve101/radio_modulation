@@ -8,7 +8,7 @@ def make_conv( idx, bw, create_op, model_dir ):
     f_in = model_dir + "/vgg_conv_lyr%d.csv" % idx
     f_tree = model_dir + "/vgg_conv_lyr%d_td_cse.csv" % idx
     mod_out = "conv%d" % idx
-    f_out = model_dir + mod_out + ".sv"
+    f_out = model_dir + "/" + mod_out + ".sv"
     matrix, no_in, no_out, initial_no_adds = twn.get_matrix( f_in  )
     matrix = twn.td_CSE( matrix )
     twn.write_output( f_tree, matrix, initial_no_adds, no_in, no_out )
