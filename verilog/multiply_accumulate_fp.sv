@@ -6,6 +6,7 @@ module multiply_accumulate_fp
     parameter BW = 16,
     parameter BW_W = 2,
     parameter R_SHIFT = 0,
+    parameter DEBUG_FLAG = 0,
     parameter NUM_CYC = 32
 ) (
    input 				     clk,
@@ -27,12 +28,18 @@ always @( posedge clk ) begin
    end else begin
       mult_res[i] <= $signed( w_vec[2*i] ) * $signed( data_in[2*i] )  + $signed( w_vec[2*i+1] ) * $signed( data_in[2*i+1] );
    end
+   if ( DEBUG_FLAG ) begin
+      $display( "mult_res[%x] = %x", i, mult_res );
+   end
 end
 end
 endgenerate
 reg new_sum_reg;
 always @( posedge clk ) begin
    new_sum_reg <= new_sum;
+   if ( DEBUG_FLAG ) begin
+      $display( "new_sum = %x, shift_res = %x", new_sum_reg, shift_res );
+   end
 end
 pipelined_accumulator
 #(

@@ -13,8 +13,8 @@ def format_hex( x, bits = 16 ):
 
 def get_weights( weights, bits, no_in ):
     w_vec = []
-    for i in range( 0, len(weights), no_in ):
-        tmp_w = np.reshape( weights[i*no_in:(i+1)*no_in], [-1] )
+    for i in range( 0, int(len(weights)/no_in) ):
+        tmp_w = np.reshape( np.transpose(weights[i*no_in:(i+1)*no_in]), [-1] )
         hex_w = [ format_hex( x, bits ) for x in tmp_w ]
         w_vec += [ "{ " + ", ".join( reversed(hex_w) ) + " }" ]
     return "{ " +  ", ".join( reversed(w_vec) ) + " }"
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     f_out.write( "localparam LOG2_D%s_CYC = %d;\n" % ( lyr, log2_d1_cyc ) )
     f_out.write( "localparam D%s_CYC = %d;\n" % ( lyr, d1_cyc ) )
     f_out.write( "localparam D%s_CH = %d;\n" % ( lyr, weights.shape[1] ) )
-    f_out.write( "reg [D%s_CYC-1:0][D%s_CH-1:0][D%s_BW_W-1:0] dw_%s = " % ( lyr, lyr, lyr, lyr ) )
+    f_out.write( "reg [D%s_CYC-1:0][D%s_IN_SIZE*D%s_CH-1:0][D%s_BW_W-1:0] dw_%s = " % ( lyr, lyr, lyr, lyr, lyr ) )
     f_out.write( w_str )
     f_out.write( ";\n" )
     f_out.close()

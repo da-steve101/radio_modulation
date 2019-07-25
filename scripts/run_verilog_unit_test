@@ -5,6 +5,8 @@ while [[ $# -gt 0 ]]
 do
 key="$1"
 
+VIVADO_PATH=/opt/Xilinx/Vivado/2018.2/
+
 case $key in
     -p|--param_file)
     PARAMFILE="$2"
@@ -74,7 +76,7 @@ if { [string length \$curr_wave] == 0 } {
   }
 }
 
-run 2300ns
+run 30000ns
 quit
 """ > $topname.tcl
 
@@ -109,10 +111,10 @@ do
 
   echo running with params $param_str
 
-  ExecStep /opt/Xilinx/Vivado/2018.1/bin/xvlog --incr --relax -L xil_defaultlib --sv $all_files 2>&1 | tee compile.log
-  ExecStep /opt/Xilinx/Vivado/2018.1/bin/xelab $param_str -wto 1ec86628b05f4fe1a733840854498458 --incr --debug typical --relax --mt 8 -L xil_defaultlib -L unisims_ver -L unimacro_ver -L secureip -L xpm --snapshot $topname"_behav" $topname  -log elaborate.log
-  ExecStep /opt/Xilinx/Vivado/2018.1/bin/xsim $topname"_behav" -key {Behavioral:sim_1:Functional:$topname} -tclbatch $topname.tcl -log simulate.log
-  if grep -q "ASSERTION FAILED" simulate.log; then
+  ExecStep $VIVADO_PATH/bin/xvlog --incr --relax -L xil_defaultlib --sv $all_files 2>&1 | tee compile.log
+  ExecStep $VIVADO_PATH/bin/xelab $param_str -wto 1ec86628b05f4fe1a733840854498458 --incr --debug typical --relax --mt 8 -L xil_defaultlib -L unisims_ver -L unimacro_ver -L secureip -L xpm -L fifo_generator_v13_2_2 --snapshot $topname"_behav" $topname  -log elaborate.log
+  ExecStep $VIVADO_PATH/bin/xsim $topname"_behav" -key {Behavioral:sim_1:Functional:$topname} -tclbatch $topname.tcl -log simulate.log
+  if grep -q "ASSERTION FAIL" simulate.log; then
     echo -e "\e[31mTEST FAILED: check simulate.log\e[0m"
     exit 1
   fi

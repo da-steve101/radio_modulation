@@ -21,8 +21,8 @@ module dense_layer_fp
    localparam LOG2_CYC = $clog2( NUM_CYC );
    reg [OUTPUT_SIZE-1:0][BW-1:0] res_out;
    reg [LOG2_CYC-1:0] cntr;
-   reg [LOG2_NO_VECS+1:0] vld_sr;
-   assign vld_out = vld_sr[LOG2_NO_VECS+1];
+   reg [LOG2_NO_VECS+2:0] vld_sr;
+   assign vld_out = vld_sr[LOG2_NO_VECS+2];
    assign data_out = res_out;
 
    always @( posedge clk ) begin
@@ -33,7 +33,7 @@ module dense_layer_fp
 	 if ( vld_in ) begin
 	    cntr <= cntr + 1;
 	 end
-	 vld_sr <= { vld_sr[LOG2_NO_VECS:0], cntr == NUM_CYC - 1 };
+	 vld_sr <= { vld_sr[LOG2_NO_VECS+1:0], cntr == NUM_CYC - 1 };
       end
    end
 

@@ -145,39 +145,49 @@ output [CH_OUT-1:0][BW-1:0] data_out
       assign window_c1[2*i] = w1_out[3-i][15:0];
       assign window_c1[2*i+1] = w1_out[3-i][31:16];
    end
-   for ( i = 0; i < 64; i++ ) begin
+   for ( i = 0; i < BN1_CH; i++ ) begin
       assign mp1_in[i] = { c1_A_out[i], c1_B_out[i] };
       // lyr2
       assign w2_in[0][i*W2_BW +: W2_BW] = bn1_out[i];
       assign window_c2[i] = w2_out[2][W2_BW*i +: W2_BW];
-      assign window_c2[i + 64] = w2_out[1][W2_BW*i +: W2_BW];
-      assign window_c2[i + 128] = w2_out[0][W2_BW*i +: W2_BW];
-      // lyr3
+      assign window_c2[i + BN1_CH] = w2_out[1][W2_BW*i +: W2_BW];
+      assign window_c2[i + 2*BN1_CH] = w2_out[0][W2_BW*i +: W2_BW];
+   end
+   // lyr3
+   for ( i = 0; i < BN2_CH; i++ ) begin
       assign w3_in[i*W3_BW +: W3_BW] = ts2_out[i];
       assign window_c3[i] = w3_out[2][W3_BW*i +: W3_BW];
-      assign window_c3[i + 64] = w3_out[1][W3_BW*i +: W3_BW];
-      assign window_c3[i + 128] = w3_out[0][W3_BW*i +: W3_BW];
-      // lyr4
+      assign window_c3[i + BN2_CH] = w3_out[1][W3_BW*i +: W3_BW];
+      assign window_c3[i + 2*BN2_CH] = w3_out[0][W3_BW*i +: W3_BW];
+   end
+   // lyr4
+   for ( i = 0; i < BN3_CH; i++ ) begin
       assign w4_in[i*W4_BW +: W4_BW] = ts3_out[i];
       assign window_c4[i] = w4_out[2][W4_BW*i +: W4_BW];
-      assign window_c4[i + 64] = w4_out[1][W4_BW*i +: W4_BW];
-      assign window_c4[i + 128] = w4_out[0][W4_BW*i +: W4_BW];
-      // lyr5
+      assign window_c4[i + BN3_CH] = w4_out[1][W4_BW*i +: W4_BW];
+      assign window_c4[i + 2*BN3_CH] = w4_out[0][W4_BW*i +: W4_BW];
+   end
+   // lyr5
+   for ( i = 0; i < BN4_CH; i++ ) begin
       assign w5_in[i*W5_BW +: W5_BW] = ts4_out[i];
       assign window_c5[i] = w5_out[2][i*W5_BW +: W5_BW];
-      assign window_c5[i + 64] = w5_out[1][i*W5_BW +: W5_BW];
-      assign window_c5[i + 128] = w5_out[0][i*W5_BW +: W5_BW];
-      // lyr6
+      assign window_c5[i + BN4_CH] = w5_out[1][i*W5_BW +: W5_BW];
+      assign window_c5[i + 2*BN4_CH] = w5_out[0][i*W5_BW +: W5_BW];
+   end
+   // lyr6
+   for ( i = 0; i < BN5_CH; i++ ) begin
       assign w6_in[i*W6_BW +: W6_BW] = ts5_out[i];
       assign window_c6[i] = w6_out[2][i*W6_BW +: W6_BW];
-      assign window_c6[i + 64] = w6_out[1][i*W6_BW +: W6_BW];
-      assign window_c6[i + 128] = w6_out[0][i*W6_BW +: W6_BW];
-      // lyr7
+      assign window_c6[i + BN5_CH] = w6_out[1][i*W6_BW +: W6_BW];
+      assign window_c6[i + 2*BN5_CH] = w6_out[0][i*W6_BW +: W6_BW];
+   end
+   // lyr7
+   for ( i = 0; i < BN6_CH; i++ ) begin
       assign ts6_in[i] = { 16'h0, bn6_out[i] };
       assign w7_in[i*W7_BW +: W7_BW] = ts6_out[i];
       assign window_c7[i] = w7_out[2][i*W7_BW +: W7_BW];
-      assign window_c7[i + 64] = w7_out[1][i*W7_BW +: W7_BW];
-      assign window_c7[i + 128] = w7_out[0][i*W7_BW +: W7_BW];
+      assign window_c7[i + BN6_CH] = w7_out[1][i*W7_BW +: W7_BW];
+      assign window_c7[i + 2*BN6_CH] = w7_out[0][i*W7_BW +: W7_BW];
    end
    endgenerate
 
@@ -191,7 +201,7 @@ output [CH_OUT-1:0][BW-1:0] data_out
    wire [BN7_CH*BW-1:0] ts7_in;
    assign ts7_in = bn7_out;
    wire 		ts7_vld;
-   wire [BW-1:0] 	ts7_out;
+   wire [D1_IN_SIZE*BW-1:0] ts7_out;
    wire [D1_CH-1:0][BW-1:0] d1_out;
    wire 		    d1_vld;
    reg [LOG2_D1_CYC-1:0]    d1_cntr;
@@ -200,7 +210,7 @@ output [CH_OUT-1:0][BW-1:0] data_out
    wire [BND1_CH*BW-1:0]      tsd1_in;
    assign tsd1_in = bnd1_out;
    wire 		      tsd1_vld;
-   wire [BW-1:0] 	      tsd1_out;
+   wire [D2_IN_SIZE*BW-1:0]   tsd1_out;
    wire [D2_CH-1:0][BW-1:0]   d2_out;
    wire 		      d2_vld;
    reg [LOG2_D2_CYC-1:0]      d2_cntr;
@@ -209,7 +219,7 @@ output [CH_OUT-1:0][BW-1:0] data_out
    wire [BND2_CH*BW-1:0]      tsd2_in;
    assign tsd2_in = bnd2_out;
    wire 		      tsd2_vld;
-   wire [BW-1:0] 	      tsd2_out;
+   wire [D3_IN_SIZE*BW-1:0]   tsd2_out;
    wire [D3_CH-1:0][BW-1:0]   d3_out;
    wire 		  d3_vld;
    reg [LOG2_D3_CYC-1:0]  d3_cntr;
@@ -220,13 +230,25 @@ output [CH_OUT-1:0][BW-1:0] data_out
 	 d3_cntr <= 0;
       end else begin
 	 if ( ts7_vld ) begin
-	    d1_cntr <= d1_cntr + 1;
+	    if ( d1_cntr == D1_CYC - 1 ) begin
+	       d1_cntr <= 0;
+	    end else begin
+	       d1_cntr <= d1_cntr + 1;
+	    end
 	 end
 	 if ( tsd1_vld ) begin
-	    d2_cntr <= d2_cntr + 1;
+	    if ( d2_cntr == D2_CYC - 1 ) begin
+	       d2_cntr <= 0;
+	    end else begin
+	       d2_cntr <= d2_cntr + 1;
+	    end
 	 end
 	 if ( tsd2_vld ) begin
-	    d3_cntr <= d3_cntr + 1;
+	    if ( d3_cntr == D1_CYC - 1 ) begin
+	       d3_cntr <= 0;
+	    end else begin
+	       d3_cntr <= d3_cntr + 1;
+	    end
 	 end
       end
    end
@@ -695,7 +717,7 @@ to_serial
 #(
   .NO_CH(1),
   .BW_IN(BN7_CH*BW),
-  .BW_OUT(BW)
+  .BW_OUT(D1_IN_SIZE*BW)
   ) ts7 (
 .clk(clk),
 .rst(rst),
@@ -708,7 +730,7 @@ to_serial
 dense_layer_fp
 #(
   .INPUT_SIZE(D1_IN_SIZE),
-  .NUM_CYC( D1_CYC ),
+  .NUM_CYC(D1_CYC),
   .BW(BW),
   .BW_W(D1_BW_W),
   .R_SHIFT(D1_SHIFT),
@@ -743,7 +765,7 @@ to_serial
 #(
   .NO_CH(1),
   .BW_IN(D1_CH*BW),
-  .BW_OUT(BW)
+  .BW_OUT(D2_IN_SIZE*BW)
   ) tsd1 (
 .clk(clk),
 .rst(rst),
@@ -791,7 +813,7 @@ to_serial
 #(
   .NO_CH(1),
   .BW_IN(D2_CH*BW),
-  .BW_OUT(BW)
+  .BW_OUT(D3_IN_SIZE*BW)
   ) tsd2 (
 .clk(clk),
 .rst(rst),
