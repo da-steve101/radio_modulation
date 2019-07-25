@@ -9,10 +9,10 @@ import tqdm
 import os
 import argparse
 
-def run_tf_version( model_name, x_in, nu_conv, nu_dense, no_filt, twn_incr_act = None ):
+def run_tf_version( model_name, x_in, nu_conv, nu_dense, no_filt, twn_incr_act = -1 ):
     x = tf.placeholder( tf.float32, [1,1024,2] )
     nu = [0.7] + [nu_conv]*6 + [nu_dense]*2
-    if twn_incr_act is not None:
+    if twn_incr_act > -1:
         act_prec = [1]*twn_incr_act + [ 1 << ( i + 1 ) for i in range(6-twn_incr_act) ] + [1]*3
         act_prec = [ x if x < 16 else None for x in act_prec ]
     else:
@@ -84,11 +84,8 @@ def floor_to( img, prec ):
 def round_to( img, prec ):
     return np.round( img * ( 1 << prec ) )/( 1 << prec )
 
-def compute_network( model_dir, x_in, no_filt, prec = 4, wr_files = False ):
+def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = False ):
     img = x_in[0]
-    mean = np.mean(img, axis=0)
-    img = ( img - mean )
-    img = round_to( img, prec )
     for i in range(1,8):
         conv_weights = rd_tri_weights_file( model_dir + "/vgg_conv_lyr" + str(i) + ".csv" )
         conv_weights = np.reshape( conv_weights, [ 3, -1, no_filt ] )
@@ -96,7 +93,7 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, wr_files = False ):
         if wr_files:
             wr_img( img, model_dir + "/conv_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_lyr" + str(i) + ".csv" )
-        bnvars = round_to( bnvars, prec + 2 )
+        bnvars = [ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ]
         img = compute_bn_relu( img, bnvars )
         img = floor_to( img, prec )
         if wr_files:
@@ -111,7 +108,7 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, wr_files = False ):
         if wr_files:
             wr_img( [img], model_dir + "/dense_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_dense_" + str(i) + ".csv" )
-        bnvars = round_to( bnvars, prec + 2 )
+        bnvars = [ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ]
         img = compute_bn_relu( img, bnvars )
         img = floor_to( img, prec )
         if wr_files:
@@ -165,6 +162,10 @@ Will binaraize the last conv layer and the dense layers""" )
                          help = "number of filters to use for vgg" )
     parser.add_argument( "--run_only", type=int, default = -1,
                          help = "number of iter to run, -1 => all" )
+    parser.add_argument( "--prec", type=int, default = 4,
+                         help = "number of fractional bits in activations" )
+    parser.add_argument( "--bn_p", type=int, default = 6,
+                         help = "number of fractional bits in bn vars" )
     parser.add_argument( "--wr_files", action='store_true',
                          help = "write files stages" )
     parser.add_argument( "--show_progress", action='store_true',
@@ -192,13 +193,13 @@ if __name__ == "__main__":
                 iterator = tqdm.tqdm( iterator )
             for i in iterator:
                 x_in, y, z = sess.run( [ signal, label, snr ] )
+                img = x_in
+                mean = np.mean(img, axis=0)
+                img = ( img - mean )
+                img = round_to( img, args.prec )
                 if args.wr_files:
-                    img = x_in
-                    mean = np.mean(img, axis=0)
-                    img = ( img - mean )
-                    img = round_to( img, prec )
                     wr_img( img, args.model_name + "/input_img.csv")
-                np_pred = compute_network( args.model_name, [x_in], args.no_filt, wr_files = args.wr_files )
+                np_pred = compute_network( args.model_name, [img], args.no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files )
                 preds = np.argmax( np_pred )
                 if z not in cntr_ary:
                     cntr_ary[z] = 0
@@ -215,11 +216,14 @@ if __name__ == "__main__":
     else:
         if os.path.exists( args.model_name + "/input_img.csv" ):
             x_in = rd_fp_weights_file( args.model_name + "/input_img.csv" )
-            x_in = np.array([ x_in ])
         else:
-            x_in = np.random.normal( 0, 1, [1,1024,2] ).astype( np.float32 )
+            x_in = np.random.normal( 0, 1, [1024,2] ).astype( np.float32 )
+            mean = np.mean(img, axis=0)
+            img = ( img - mean )
+            img = round_to( img, args.prec )
+        x_in = np.array([ x_in ])
         tf_pred = run_tf_version( args.model_name, x_in, args.nu_conv, args.nu_dense, args.no_filt, args.twn_incr_act )
-        np_pred = compute_network( args.model_name, x_in, args.no_filt, wr_files = args.wr_files )
+        np_pred = compute_network( args.model_name, x_in, args.no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files )
         print( "tf_pred = ", tf_pred, tf_pred.shape )
         print( "np_pred = ", np_pred, np_pred.shape )
         print( "diff = ", np.abs( tf_pred - np_pred ) )
