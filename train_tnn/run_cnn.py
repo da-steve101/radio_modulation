@@ -187,8 +187,11 @@ def get_args():
                          help = "The parameter to use when trinarizing the conv layers" )
     parser.add_argument( "--nu_dense", type=float,
                          help = "The parameter to use when trinarizing the dense layers" )
-    parser.add_argument( "--no_filt_vgg", type=int, default = 64,
-                         help = "number of filters to use for vgg" )
+    vgg_filt_grp = parser.add_mutually_exclusive_group()
+    vgg_filt_grp.add_argument( "--no_filt_vgg", type=int,
+                               help = "number of filters to use for vgg" )
+    vgg_filt_grp.add_argument( "--no_filts", type=str,
+                               help = "number of filters to use for vgg" )
     parser.add_argument( "--gpus", type=str,
                          help = "GPUs to use" )
     return parser.parse_args()
@@ -215,21 +218,26 @@ if __name__ == "__main__":
     else:
         signal, label, snr = iterator.get_next()
     nu = [0.7] + [args.nu_conv]*6 + [args.nu_dense]*2
+    no_filt = 64
+    if args.no_filt_vgg is not None:
+        no_filt = args.no_filt_vgg
+    if args.no_filts is not None:
+        no_filt = [ int(x) for x in args.no_filts.split(",") ]
     if args.resnet:
         with tf.variable_scope("teacher"):
             pred = resnet.get_net( signal, training = training )
     elif args.full_prec:
-        pred = Vgg10.get_net( signal, training, use_SELU = True, act_prec = None, nu = None, no_filt = args.no_filt_vgg )
+        pred = Vgg10.get_net( signal, training, use_SELU = True, act_prec = None, nu = None, no_filt = no_filt )
     elif args.twn:
-        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = None, nu = nu, no_filt = args.no_filt_vgg )
+        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = None, nu = nu, no_filt = no_filt )
     elif args.twn_binary_act:
         act_prec = [1]*9
-        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = args.no_filt_vgg )
+        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = no_filt )
     elif args.twn_incr_act is not None:
         # last conv and dense layers should be bin
         act_prec = [1]*args.twn_incr_act + [ 1 << ( i + 1 ) for i in range(6-args.twn_incr_act) ] + [1]*3
         act_prec = [ x if x < 16 else None for x in act_prec ]
-        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = args.no_filt_vgg )
+        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = no_filt )
     else:
         tf.logging.log( tf.logging.ERROR, "Invalid arguments" )
         exit()

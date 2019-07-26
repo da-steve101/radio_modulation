@@ -24,8 +24,8 @@ output [CH_OUT-1:0][BW-1:0] data_out
 `include "bn7.sv"
 
    // window lyr 1
-   localparam W1L2 = $clog2( BW ) + 1;
-   localparam W1_BW = 1 << W1L2;
+   localparam integer W1L2 = $clog2( BW ) + 1;
+   localparam integer W1_BW = 1 << W1L2;
    wire [W1_BW-1:0] 	    w1_in [1:0];
    assign w1_in[1] = data_in[3:2];
    assign w1_in[0] = data_in[1:0];
@@ -34,9 +34,9 @@ output [CH_OUT-1:0][BW-1:0] data_out
    wire [7:0][BW-1:0] window_c1;
 
    // window lyr 2
-   localparam W2L2 = $clog2( BW );
-   localparam W2_BW = 1 << W2L2;
-   localparam W2_CH = BN1_CH << $clog2( W2_BW );
+   localparam integer W2L2 = $clog2( BW );
+   localparam integer W2_BW = 1 << W2L2;
+   localparam integer W2_CH = BN1_CH << $clog2( W2_BW );
    wire 	      w2_vld;
    wire [W2_CH-1:0]   w2_in [0:0];
    wire [W2_CH-1:0]   w2_out [2:0];
@@ -44,10 +44,10 @@ output [CH_OUT-1:0][BW-1:0] data_out
    wire c2_ser_rst;
 
    // window lyr 3
-   localparam W3_SC_L2 = 1; // number of serial cycles for adders
-   localparam W3L2 = $clog2( BW ) - W3_SC_L2 < 0 ? 0 : $clog2( BW ) - W3_SC_L2;
-   localparam W3_BW = 1 << W3L2;
-   localparam W3_CH = BN2_CH << $clog2( W3_BW );
+   localparam integer W3_SC_L2 = 1; // number of serial cycles for adders
+   localparam integer W3L2 = $clog2( BW ) - W3_SC_L2 < 0 ? 0 : $clog2( BW ) - W3_SC_L2;
+   localparam integer W3_BW = 1 << W3L2;
+   localparam integer W3_CH = BN2_CH << $clog2( W3_BW );
    wire w3_vld;
    wire [W3_CH-1:0]     w3_in;
    wire [W3_CH-1:0]     w3_out [2:0];
@@ -55,10 +55,10 @@ output [CH_OUT-1:0][BW-1:0] data_out
    wire c3_ser_rst;
 
    // window lyr 4
-   localparam W4_SC_L2 = 2;
-   localparam W4L2 = $clog2( BW ) - W4_SC_L2 < 0 ? 0 : $clog2( BW ) - W4_SC_L2;
-   localparam W4_BW = 1 << W4L2;
-   localparam W4_CH = BN3_CH << $clog2( W4_BW );
+   localparam integer W4_SC_L2 = 2;
+   localparam integer W4L2 = $clog2( BW ) - W4_SC_L2 < 0 ? 0 : $clog2( BW ) - W4_SC_L2;
+   localparam integer W4_BW = 1 << W4L2;
+   localparam integer W4_CH = BN3_CH << $clog2( W4_BW );
    wire w4_vld;
    wire [W4_CH-1:0]     w4_in;
    wire [W4_CH-1:0]     w4_out [2:0];
@@ -66,10 +66,10 @@ output [CH_OUT-1:0][BW-1:0] data_out
    wire c4_ser_rst;
 
    // window lyr 5
-   localparam W5_SC_L2 = 3;
-   localparam W5L2 = $clog2( BW ) - W5_SC_L2 < 0 ? 0 : $clog2( BW ) - W5_SC_L2;
-   localparam W5_BW = 1 << W5L2;
-   localparam W5_CH = BN4_CH << $clog2( W5_BW );
+   localparam integer W5_SC_L2 = 3;
+   localparam integer W5L2 = $clog2( BW ) - W5_SC_L2 < 0 ? 0 : $clog2( BW ) - W5_SC_L2;
+   localparam integer W5_BW = 1 << W5L2;
+   localparam integer W5_CH = BN4_CH << $clog2( W5_BW );
    wire w5_vld;
    wire [W5_CH-1:0]     w5_in;
    wire [W5_CH-1:0]     w5_out [2:0];
@@ -77,10 +77,10 @@ output [CH_OUT-1:0][BW-1:0] data_out
    wire c5_ser_rst;
 
    // window lyr 6
-   localparam W6_SC_L2 = 4;
-   localparam W6L2 = $clog2( BW ) - W6_SC_L2 < 0 ? 0 : $clog2( BW ) - W6_SC_L2;
-   localparam W6_BW = 1 << W6L2;
-   localparam W6_CH = BN5_CH << $clog2( W6_BW );
+   localparam integer W6_SC_L2 = 4;
+   localparam integer W6L2 = $clog2( BW ) - W6_SC_L2 < 0 ? 0 : $clog2( BW ) - W6_SC_L2;
+   localparam integer W6_BW = 1 << W6L2;
+   localparam integer W6_CH = BN5_CH << $clog2( W6_BW );
    wire w6_vld;
    wire [W6_CH-1:0]     w6_in;
    wire [W6_CH-1:0]     w6_out [2:0];
@@ -88,10 +88,10 @@ output [CH_OUT-1:0][BW-1:0] data_out
    wire c6_ser_rst;
 
    // window lyr 7
-   localparam W7_SC_L2 = 5;
-   localparam W7L2 = $clog2( BW ) - W7_SC_L2 < 0 ? 0 : $clog2( BW ) - W7_SC_L2;
-   localparam W7_BW = 1 << W6L2;
-   localparam W7_CH = BN6_CH << $clog2( W7_BW );
+   localparam integer W7_SC_L2 = 5;
+   localparam integer W7L2 = $clog2( BW ) - W7_SC_L2 < 0 ? 0 : $clog2( BW ) - W7_SC_L2;
+   localparam integer W7_BW = 1 << W6L2;
+   localparam integer W7_CH = BN6_CH << $clog2( W7_BW );
    wire w7_vld;
    wire [W7_CH-1:0]     w7_in;
    wire [W7_CH-1:0]     w7_out [2:0];

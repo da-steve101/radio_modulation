@@ -40,24 +40,28 @@ def get_net( x, training = False, use_SELU = False, act_prec = None, nu = None, 
         nu = [None]*9
     if act_prec is None:
         act_prec = [None]*9
+    if type(no_filt) == int:
+        no_filt = [no_filt]*7 + [128,128,24]
+    else:
+        assert len(no_filt) == 10, "Incorrect length of no_filt for custom"
     with tf.variable_scope("lyr1"):
-        cnn = get_conv_layer( x, training, no_filt = no_filt, nu = nu[0], act_prec = act_prec[0] )
+        cnn = get_conv_layer( x, training, no_filt = no_filt[0], nu = nu[0], act_prec = act_prec[0] )
     with tf.variable_scope("lyr2"):
-        cnn = get_conv_layer( cnn, training, no_filt = no_filt, nu = nu[1], act_prec = act_prec[1] )
+        cnn = get_conv_layer( cnn, training, no_filt = no_filt[1], nu = nu[1], act_prec = act_prec[1] )
     with tf.variable_scope("lyr3"):
-        cnn = get_conv_layer( cnn, training, no_filt = no_filt, nu = nu[2], act_prec = act_prec[2] )
+        cnn = get_conv_layer( cnn, training, no_filt = no_filt[2], nu = nu[2], act_prec = act_prec[2] )
     with tf.variable_scope("lyr4"):
-        cnn = get_conv_layer( cnn, training, no_filt = no_filt, nu = nu[3], act_prec = act_prec[3] )
+        cnn = get_conv_layer( cnn, training, no_filt = no_filt[3], nu = nu[3], act_prec = act_prec[3] )
     with tf.variable_scope("lyr5"):
-        cnn = get_conv_layer( cnn, training, no_filt = no_filt, nu = nu[4], act_prec = act_prec[4] )
+        cnn = get_conv_layer( cnn, training, no_filt = no_filt[4], nu = nu[4], act_prec = act_prec[4] )
     with tf.variable_scope("lyr6"):
-        cnn = get_conv_layer( cnn, training, no_filt = no_filt, nu = nu[5], act_prec = act_prec[5] )
+        cnn = get_conv_layer( cnn, training, no_filt = no_filt[5], nu = nu[5], act_prec = act_prec[5] )
     with tf.variable_scope("lyr7"):
-        cnn = get_conv_layer( cnn, training, no_filt = no_filt, nu = nu[6], act_prec = act_prec[6] )
+        cnn = get_conv_layer( cnn, training, no_filt = no_filt[6], nu = nu[6], act_prec = act_prec[6] )
     cnn = tf.layers.flatten( cnn )
     if use_SELU:
-        dense_1 = tf.get_variable( "dense_8", [ cnn.get_shape()[-1], 128 ], initializer = get_initializer() )
-        dense_2 = tf.get_variable( "dense_9", [ 128, 128 ], initializer = get_initializer() )
+        dense_1 = tf.get_variable( "dense_8", [ cnn.get_shape()[-1], no_filt[7] ], initializer = get_initializer() )
+        dense_2 = tf.get_variable( "dense_9", [ no_filt[7], no_filt[8] ], initializer = get_initializer() )
         with tf.variable_scope("dense_1"):
             cnn = tf.matmul( cnn, dense_1 )
             cnn = tf.nn.selu( cnn )
@@ -69,8 +73,8 @@ def get_net( x, training = False, use_SELU = False, act_prec = None, nu = None, 
             dropped = tf.contrib.nn.alpha_dropout( cnn, 0.95 )
             cnn = tf.where( training, dropped, cnn )
     else:
-        dense_1 = tf.get_variable( "dense_8", [ cnn.get_shape()[-1], 128 ] )
-        dense_2 = tf.get_variable( "dense_9", [ 128, 128 ] )
+        dense_1 = tf.get_variable( "dense_8", [ cnn.get_shape()[-1], no_filt[7] ] )
+        dense_2 = tf.get_variable( "dense_9", [ no_filt[7], no_filt[8] ] )
         tf.summary.histogram( "dense_1_fp", dense_1 )
         tf.summary.histogram( "dense_2_fp", dense_2 )
         dense_1 = q.trinarize( dense_1, nu = nu[7] )
@@ -92,5 +96,5 @@ def get_net( x, training = False, use_SELU = False, act_prec = None, nu = None, 
             else:
                 cnn = tf.nn.relu( cnn )
     with tf.variable_scope("dense_3"):
-        pred = tf.layers.dense( cnn, 24, use_bias = False )
+        pred = tf.layers.dense( cnn, no_filt[9], use_bias = False )
     return pred
