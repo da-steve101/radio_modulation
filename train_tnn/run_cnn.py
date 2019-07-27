@@ -8,6 +8,8 @@ import Vgg10
 from tqdm import tqdm
 import os
 import quantization as q
+import math
+import sys
 
 '''
 Classes:
@@ -37,32 +39,41 @@ Classes:
 23) OQPSK
 '''
 
-NO_TEST_BATCHES = 154 # 410*24 / 64
-NO_TEST_EXAMPLES = NO_TEST_BATCHES * 64
-
-def parse_example( ex ):
+def parse_example( ex, use_teacher = False ):
     ftrs = {
         "signal" : tf.FixedLenFeature( shape = [2048 ], dtype = tf.float32 ),
         "label" : tf.FixedLenFeature( shape = [ 1 ], dtype = tf.string ),
         "snr" : tf.FixedLenFeature( shape = [ 1 ], dtype = tf.int64 )
     }
+    if use_teacher:
+        ftrs["teacher"] = tf.FixedLenFeature( shape = [24], dtype = tf.float32 )
     parsed_ex = tf.parse_single_example( ex, ftrs )
     signal = tf.transpose( tf.reshape( parsed_ex["signal"], ( 2, 1024 ) ) )
     label_char = tf.substr( parsed_ex["label"], 0, 1 )
     label = tf.decode_raw( label_char, out_type=tf.uint8)
     label = tf.reshape( label, [] )
     snr = tf.reshape( parsed_ex["snr"], [] )
+    if use_teacher:
+        teacher = tf.reshape( parsed_ex["teacher"], ( 24, ) )
+        return signal, tf.cast( label, tf.int32 ), snr, teacher
     return signal, tf.cast( label, tf.int32 ), snr
 
-def filter_snr( sig, label, snr ):
+def filter_snr_t( signal, label, snr, teacher ):
     return tf.math.greater( snr, 4 )
 
-def batcher( input_file, batch_size, training = True ):
+def filter_snr( signal, label, snr ):
+    return tf.math.greater( snr, 4 )
+
+
+def batcher( input_file, batch_size, training = True, use_teacher = False ):
     dset = tf.data.TFRecordDataset( [ input_file ] )
-    dset = dset.map( parse_example )
+    dset = dset.map( lambda x: parse_example( x, use_teacher and training ) )
     dset = dset.prefetch( buffer_size = 16*batch_size)
     if training:
-        dset = dset.filter( filter_snr )
+        if use_teacher:
+            dset = dset.filter( filter_snr_t )
+        else:
+            dset = dset.filter( filter_snr )
         dset = dset.repeat()
         dset = dset.shuffle( 8*batch_size )
     dset = dset.batch( batch_size )
@@ -84,6 +95,14 @@ def get_optimizer( pred, label, learning_rate, resnet_pred = None ):
         student_err = tf.sqrt( tf.nn.l2_loss( resnet_pred - pred ) )/5
         tf.summary.scalar( "student_err", student_err )
         err = student_err + err
+    if resnet_pred is not None:
+        teacher_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            labels = label,
+            logits = resnet_pred,
+            name = "softmax_teacher_err_func"
+        )
+        teacher_err = tf.reduce_sum( teacher_err )
+        tf.summary.scalar( "teacher_err", teacher_err )
     lr = tf.train.exponential_decay(
         learning_rate,
         tf.train.get_or_create_global_step(),
@@ -106,8 +125,6 @@ def test_loop( snr, pred, label, training, fname, no_loops ):
     pred = tf.math.argmax( pred, axis = 1 )
     if fname is None:
         fname = "test_pred.csv"
-    if no_loops is None:
-        no_loops = NO_TEST_BATCHES
     f_out = open( fname, "w" )
     wrt = csv.writer( f_out )
     corr_cnt = 0
@@ -122,7 +139,7 @@ def test_loop( snr, pred, label, training, fname, no_loops ):
     tf.logging.log( tf.logging.INFO, "Test done, accr = : " + str( corr_cnt / total_cnt ) )
     f_out.close()
 
-def train_loop( opt, summary_writer, num_correct, training, no_steps = 100000, do_val = True ):
+def train_loop( opt, summary_writer, num_correct, training, no_test_batches, batch_size, no_steps = 100000, do_val = True ):
     summaries = tf.summary.merge_all()
     curr_step = tf.train.get_global_step()
     step = sess.run( curr_step )
@@ -134,10 +151,10 @@ def train_loop( opt, summary_writer, num_correct, training, no_steps = 100000, d
                 summary_writer.add_summary( smry, step )
             if step % 10000 == 0 and do_val:
                 cnt = 0
-                for i in range( NO_TEST_BATCHES ):
+                for i in range( no_test_batches ):
                     corr = sess.run( num_correct, feed_dict = { training : False } )
                     cnt += corr
-                tf.logging.log( tf.logging.INFO, "Step: " + str( step ) + " - Test batch complete: accr = " + str( cnt / NO_TEST_EXAMPLES )  )
+                tf.logging.log( tf.logging.INFO, "Step: " + str( step ) + " - Test batch complete: accr = " + str( cnt / (no_test_batches*batch_size) )  )
     except KeyboardInterrupt:
         tf.logging.log( tf.logging.INFO, "Ctrl-c recieved, training stopped" )
     return
@@ -159,8 +176,11 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument( "--model_name", type = str, required = True,
                          help="The model name to train or test")
-    parser.add_argument( "--teacher_name", type = str,
-                         help="The resnet teacher model to train with")
+    teacher = parser.add_mutually_exclusive_group()
+    teacher.add_argument( "--teacher_name", type = str,
+                          help="The resnet teacher model to train with")
+    teacher.add_argument( "--teacher_dset", action='store_true',
+                          help="Use teacher values in the dataset")
     parser.add_argument( "--dataset", type = str, required = True,
                          help = "The dataset to train or test on" )
     parser.add_argument( "--val_dataset", type = str,
@@ -171,9 +191,9 @@ def get_args():
                          help = "Test the model on this dataset" )
     parser.add_argument( "--test_output", type = str,
                          help = "Filename to save the output in csv format ( pred, label )" )
-    parser.add_argument( "--test_batches", type = int, default = NO_TEST_BATCHES,
+    parser.add_argument( "--test_batches", type = int, default = math.ceil( 410*24/64 ),
                          help = "Number of batches to run on" )
-    parser.add_argument( "--batch_size", type=int, default = 32,
+    parser.add_argument( "--batch_size", type=int, default = 64,
                          help = "Batch size to use" )
     parser.add_argument( "--learning_rate", type=float, default = 0.001,
                          help = "The learning rate to use when training" )
@@ -198,13 +218,16 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    iterator = batcher( args.dataset, args.batch_size, not args.test )
+    iterator = batcher( args.dataset, args.batch_size, not args.test, args.teacher_dset )
     if args.gpus is not None:
         os.environ["CUDA_VISIBLE_DEVICES"]=args.gpus
     tf.logging.set_verbosity( tf.logging.INFO )
     training = tf.placeholder( tf.bool, name = "training" )
     if not args.test:
-        train_signal, train_label, train_snr = iterator.get_next()
+        if args.teacher_dset:
+            train_signal, train_label, train_snr, teacher = iterator.get_next()
+        else:
+            train_signal, train_label, train_snr = iterator.get_next()
         do_val = True
         if args.val_dataset is not None:
             test_iterator = batcher( args.val_dataset, args.batch_size, not args.test )
@@ -245,15 +268,17 @@ if __name__ == "__main__":
         pred_label = tf.cast( tf.math.argmax( pred, axis = 1 ), tf.int32 )
         num_correct = tf.reduce_sum( tf.cast( tf.math.equal( pred_label, label ), tf.float32 ) )
         num_correct = tf.reshape( num_correct, [] )
-        if not args.resnet and args.teacher_name is not None:
+        resnet_pred = None
+        if args.teacher_name is not None:
             with tf.variable_scope("teacher"):
                 resnet_pred = tf.stop_gradient( resnet.get_net( signal, training = False ) )
             resnet_saver = tf.train.Saver( tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="teacher") )
-            opt = get_optimizer( pred, label, args.learning_rate, resnet_pred )
-        else:
-            opt = get_optimizer( pred, label, args.learning_rate )
+        if args.teacher_dset:
+            resnet_pred = teacher
+        opt = get_optimizer( pred, label, args.learning_rate, resnet_pred )
     init_op = tf.global_variables_initializer()
     saver = tf.train.Saver()
+    tf.summary.histogram( "snr", snr )
     with tf.Session() as sess:
         try:
             if not args.test:
@@ -272,7 +297,7 @@ if __name__ == "__main__":
             if args.test:
                 test_loop( snr, pred, label, training, args.test_output, args.test_batches )
             else:
-                train_loop( opt, smry_wrt, num_correct, training, no_steps = args.steps, do_val = do_val )
+                train_loop( opt, smry_wrt, num_correct, training, args.test_batches, args.batch_size, no_steps = args.steps, do_val = do_val )
         except tf.errors.OutOfRangeError:
             tf.logging.log( tf.logging.INFO, "Dataset is finished" )
         finally:

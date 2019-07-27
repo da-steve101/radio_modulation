@@ -1,7 +1,6 @@
 #! /usr/bin/python3
 
 import tensorflow as tf
-import quantization as q
 
 def residual_unit( x, training = False ):
     no_filt = x.get_shape()[-1]
