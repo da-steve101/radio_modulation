@@ -77,7 +77,7 @@ if __name__ == "__main__":
     f_out = open( "tmp.csv", "w" )
     wrt = csv.writer( f_out )
     try:
-        for i in range(100):
+        while True:
             s, l, n, t = sess.run( [signal, label, snr, teacher] )
             for s_ex, l_ex, n_ex, t_ex in zip(s, l, n, t):
                 ex = get_example( s_ex, l_ex, n_ex, args.rcrd_prefix, args.rcrd_suffix, t_ex )
