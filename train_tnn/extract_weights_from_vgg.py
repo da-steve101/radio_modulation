@@ -73,25 +73,36 @@ def get_dense_mat( ops, dense_name ):
                  dense_name in op.name and op.type == "VariableV2" ][0]
     return dense_op.outputs[0]
 
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument( "--model_name", type = str, required = True,
+                         help="The model name to use")
+    parser.add_argument( "--nu_conv", type = float, default = 1.2,
+                         help="Nu for conv layers")
+    parser.add_argument( "--nu_dense", type = float, default = 0.7,
+                         help="Nu for the dense layers")
+    parser.add_argument( "--twn_incr_act", type = int, default = -1,
+                         help="Number of bin act layers followed by incr precision, -1 is no quantization")
+    parser.add_argument( "--d3_rshift", type=int, default = 6,
+                         help = "Number of fractional bits for 3rd dense layer" )
+    return parser.parse_args()
+
 if __name__ == "__main__":
-    prefix = sys.argv[1] # the model name
-    nu_conv = float(sys.argv[2]) # the conv nu
-    nu_dense = float(sys.argv[3]) # the dense nu
-    twn_incr_act = int( sys.argv[4] ) # number of bin lyrs or full prec in conv before doubling
-    if not os.path.exists( prefix ):
-        os.mkdir( prefix )
-    grph = tf.train.import_meta_graph( prefix + ".meta" )
+    args = get_args()
+    if not os.path.exists( args.model_name ):
+        os.mkdir( args.model_name )
+    grph = tf.train.import_meta_graph( args.model_name + ".meta" )
     sess = tf.Session()
-    grph.restore( sess, prefix )
+    grph.restore( sess, args.model_name )
     cnn = tf.get_default_graph()
     ops = cnn.get_operations()
-    os.chdir( prefix ) # put all files in this dir
+    os.chdir( args.model_name ) # put all files in this dir
 
-    nu = [ 0.7 ] + [ nu_conv ]*6 + [ nu_dense ]*2
-    if twn_incr_act == -1:
+    nu = [ 0.7 ] + [ args.nu_conv ]*6 + [ args.nu_dense ]*2
+    if args.twn_incr_act == -1:
         act_prec = None
     else:
-        act_prec = [1]*twn_incr_act + [ 1 << ( i + 1 ) for i in range(6-twn_incr_act) ] + [1]*3
+        act_prec = [1]*args.twn_incr_act + [ 1 << ( i + 1 ) for i in range(6-args.twn_incr_act) ] + [1]*3
     for lyr_idx in range( 1, 8 ):
         conv_filter = get_conv_filter( ops, lyr_idx )
         lyr_name = "lyr" + str(lyr_idx)
@@ -106,10 +117,8 @@ if __name__ == "__main__":
         write_bn( sess, ops, lyr_name, act_prec, eta_r )
 
     kernel = [ op for op in ops if "dense_3/dense/kernel" in op.name and op.type == "VariableV2" ][0].outputs[0]
-    # bias = [ op for op in ops if "dense_3/dense/bias" in op.name and op.type == "VariableV2" ][0].outputs[0]
     kernel_r = sess.run( kernel )
-    kernel_r = np.round( kernel_r * ( 1 << 4 ) )/(1 << 4 )
-    # kernel_r, bias_r = sess.run( [ kernel, bias ] )
+    kernel_r = np.round( kernel_r * ( 1 << args.d3_rshift ) )/(1 << args.d3_rshift )
     f = open( "vgg_dense_3.csv", "w" )
     wrt = csv.writer( f )
     for k in kernel_r:
