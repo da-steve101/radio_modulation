@@ -1,6 +1,22 @@
-C_FLAGS=-Wall -I$(MODEL_DIR) -g
-C_SRCS=tw_vgg10.c $(MODEL_DIR)/*.c
-H_SRCS=$(MODEL_DIR)/*.h
+C_FLAGS=-Wall -I$(MODEL_DIR) -O2
+C_SRCS=$(shell find $(MODEL_DIR) -name '*.c')
+H_SRCS=$(shell find $(MODEL_DIR) -name '*.h')
+BUILDDIR=build
+OBJECTS := $(addprefix $(BUILDDIR)/,$(notdir $(C_SRCS:%.c=%.o)))
 
-tw_vgg10: $(C_SRCS) $(H_SRCS) Makefile
-	$(CC) $(C_FLAGS) -o tw_vgg10 $(C_SRCS)
+all: tw_vgg10
+
+$(BUILDDIR):
+	mkdir -p $@
+
+$(BUILDDIR)/%.o: $(MODEL_DIR)/%.c
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+tw_vgg10: $(BUILDDIR) $(OBJECTS) tw_vgg10.c
+	$(CC) $(C_FLAGS) -o tw_vgg10 tw_vgg10.c $(OBJECTS)
+
+.PHONY: clean
+
+clean:
+	rm -rf tw_vgg10 *.o $(BUILDDIR)
+
