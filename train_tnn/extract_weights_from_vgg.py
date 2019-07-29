@@ -6,6 +6,7 @@ import csv
 import sys
 import numpy as np
 import os
+import argparse
 
 def decode_twn( sess, conv_filter, nu, fname ):
     clip_val = conv_filter #tf.clip_by_value( conv_filter, -1, 1 )
