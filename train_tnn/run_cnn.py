@@ -301,5 +301,6 @@ if __name__ == "__main__":
         except tf.errors.OutOfRangeError:
             tf.logging.log( tf.logging.INFO, "Dataset is finished" )
         finally:
-            tf.logging.log( tf.logging.INFO, "Saving model ... " )
-            saver.save( sess, args.model_name )
+            if not args.test:
+                tf.logging.log( tf.logging.INFO, "Saving model ... " )
+                saver.save( sess, args.model_name )
