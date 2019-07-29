@@ -53,11 +53,7 @@ def write_bn( sess, ops, lyr_name, act_prec, eta_r ):
     if act_prec is None:
         abvars = twn.get_AB( mean, var, gamma, beta, eta_r )
     else:
-        s_in = 1.0/eta_r
-        if lyr_idx == 1 or act_prec[lyr_idx-2] > 1:
-            s_in *= ( 1 << act_prec[lyr_idx-2] ) - 1
-        bits = act_prec[ lyr_idx - 1 ]
-        abvars = twn.get_AB_quantized( mean, var, gamma, beta, s_in, bits, is_round = True )
+        abvars = twn.get_AB_quantized( mean, var, gamma, beta, eta_r, is_round = True )
     f = open( "vgg_bn_" + lyr_name + ".csv", "w" )
     wrt = csv.writer( f )
     for row in abvars:

@@ -48,7 +48,7 @@ python3 verilog_generation/generate_dense_vecs.py $MODEL_DIR/vgg_dense_3.csv $MO
 # generate test vectors
 cp input_img.csv $MODEL_DIR/
 python3 train_tnn/compute_vgg_with_csv.py --model_name $MODEL_DIR --nu_conv $NU_CONV --nu_dense $NU_DENSE --no_filts $FILT_SIZES --prec $PREC --bn_p $A_PREC \
---wr_files --results_name $MODEL_DIR/tmp_res.csv
+--wr_files --results_name $MODEL_DIR/tmp_res.csv --twn_incr_act $3
 python3 verilog_generation/generate_test_vecs.py $MODEL_DIR/input_img.csv $MODEL_DIR/input_hex.sv IN $PREC
 #python3 verilog_generation/generate_test_vecs.py $MODEL_DIR/conv_mp_img_lyr1.csv $MODEL_DIR/mp1_hex.sv OUT $PREC
 #python3 verilog_generation/generate_test_vecs.py $MODEL_DIR/conv_mp_img_lyr7.csv $MODEL_DIR/mp7_hex.sv OUT $PREC

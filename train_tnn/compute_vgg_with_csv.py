@@ -56,18 +56,18 @@ def rd_bn_file( fname ):
     f.close()
     return data
 
-def compute_bn_relu( img, bnvars ):
+def compute_bn_relu( img, bnvars, do_q = False, prec_in = 0, prec_out = 0 ):
     a = bnvars[0]
     b = bnvars[1]
-    if len(bnvars) > 2:
-        x_min = bnvars[2]
-        x_max = bnvars[3]
+    if do_q:
+        x_min = floor_to( bnvars[2], prec_in )
+        x_max = ceil_to( bnvars[3], prec_in )
         img_min = img <= x_min
         img_max = img >= x_max
     img = a*img + b
-    if len(bnvars) > 2:
+    if do_q:
+        img = floor_to( img, prec_out )
         img[img_min] = 0
-        # note should be the prec needed not 1
         img[img_max] = 1
     return img*(img > 0)
 
@@ -81,29 +81,44 @@ def wr_img( img, fname ):
 def floor_to( img, prec ):
     return np.floor( img * ( 1 << prec ) )/( 1 << prec )
 
+def ceil_to( img, prec ):
+    return np.ceil( img * ( 1 << prec ) )/( 1 << prec )
+
 def round_to( img, prec ):
     return np.round( img * ( 1 << prec ) )/( 1 << prec )
 
-def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = False ):
+def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = False, incr_act = -1 ):
     img = x_in
     mean = np.mean(img, axis=0)
     img = ( img - mean )
-    img = round_to( img, args.prec )
+    img = round_to( img, prec )
+    bn_quant_precs = [ prec ]*8
+    if incr_act > 0:
+        for i in range(1,8):
+            if i <= incr_act:
+                bn_quant_precs[i] = 0
+            else:
+                bn_quant_precs[i] += 1
+                if bn_quant_precs[i] >= 4:
+                    bn_quant_precs[i] = prec
     for i in range(1,8):
         conv_weights = rd_tri_weights_file( model_dir + "/vgg_conv_lyr" + str(i) + ".csv" )
         conv_weights = np.reshape( conv_weights, [ 3, -1, no_filt[i-1] ] )
         img = twn.conv1d( img, conv_weights )
         if wr_files:
             wr_img( img, model_dir + "/conv_img_lyr" + str(i) + ".csv" )
-        bnvars = rd_bn_file( model_dir + "/vgg_bn_lyr" + str(i) + ".csv" )
-        bnvars = [ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ] + bnvars[2:]
-        img = compute_bn_relu( img, bnvars )
-        img = floor_to( img, prec )
-        if wr_files:
-            wr_img( img, model_dir + "/conv_bn_relu_img_lyr" + str(i) + ".csv" )
         img = twn.maxpool1d( img )
         if wr_files:
             wr_img( img, model_dir + "/conv_mp_img_lyr" + str(i) + ".csv" )
+        bnvars = rd_bn_file( model_dir + "/vgg_bn_lyr" + str(i) + ".csv" )
+        bnvars = np.array([ round_to( bnvars[0,:], bn_p ), round_to( bnvars[1,:], bn_p + prec ) ] + bnvars[2:,:].tolist())
+        # if incr_act < 0 then no quantization at all
+        # if i - incr_act >= 4 then also no quantization as more that 16 bits
+        do_q = ( incr_act > 0 ) and ( i - incr_act < 4 )
+        img = compute_bn_relu( img, bnvars, do_q, bn_quant_precs[i-1], bn_quant_precs[i] )
+        img = floor_to( img, prec )
+        if wr_files:
+            wr_img( img, model_dir + "/conv_bn_relu_img_lyr" + str(i) + ".csv" )
     img = np.reshape( img, [-1] )
     for i in range(1,3):
         dense_weights = rd_tri_weights_file( model_dir + "/vgg_dense_" + str(i) + ".csv" )
@@ -112,7 +127,7 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
             wr_img( [img], model_dir + "/dense_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_dense_" + str(i) + ".csv" )
         bnvars = [ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ] + bnvars[2:]
-        img = compute_bn_relu( img, bnvars )
+        img = compute_bn_relu( img, bnvars, incr_act > 0, 0, 0 )
         img = floor_to( img, prec )
         if wr_files:
             wr_img( [img], model_dir + "/dense_bn_relu_img_lyr" + str(i) + ".csv" )
@@ -221,7 +236,7 @@ if __name__ == "__main__":
         else:
             x_in = np.random.normal( 0, 1, [1024,2] ).astype( np.float32 )
         tf_pred = run_tf_version( args.model_name, [x_in], args.nu_conv, args.nu_dense, no_filt, args.twn_incr_act )
-        np_pred = compute_network( args.model_name, x_in, no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files )
+        np_pred = compute_network( args.model_name, x_in, no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files, incr_act = args.twn_incr_act )
         print( "tf_pred = ", tf_pred, tf_pred.shape )
         print( "np_pred = ", np_pred, np_pred.shape )
         print( "diff = ", np.abs( tf_pred - np_pred ) )
