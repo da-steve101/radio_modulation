@@ -4,7 +4,7 @@ import tensorflow as tf
 
 def quantize( zr, k ):
     scaling = tf.cast( tf.pow( 2.0, k ) - 1, tf.float32 )
-    return tf.ceil( scaling * zr )/scaling
+    return tf.round( scaling * zr )/scaling
 
 def shaped_relu( x, k = 1.0 ):
     act = tf.clip_by_value( x, 0, 1 )
