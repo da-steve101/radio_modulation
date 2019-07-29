@@ -93,6 +93,7 @@ if __name__ == "__main__":
     if not os.path.exists( args.model_name ):
         os.mkdir( args.model_name )
     grph = tf.train.import_meta_graph( args.model_name + ".meta" )
+    os.environ["CUDA_VISIBLE_DEVICES"]=""
     sess = tf.Session()
     grph.restore( sess, args.model_name )
     cnn = tf.get_default_graph()

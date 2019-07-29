@@ -91,12 +91,12 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
     img = round_to( img, args.prec )
     for i in range(1,8):
         conv_weights = rd_tri_weights_file( model_dir + "/vgg_conv_lyr" + str(i) + ".csv" )
-        conv_weights = np.reshape( conv_weights, [ 3, -1, no_filt ] )
+        conv_weights = np.reshape( conv_weights, [ 3, -1, no_filt[i-1] ] )
         img = twn.conv1d( img, conv_weights )
         if wr_files:
             wr_img( img, model_dir + "/conv_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_lyr" + str(i) + ".csv" )
-        bnvars = [ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ]
+        bnvars = [ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ] + bnvars[2:]
         img = compute_bn_relu( img, bnvars )
         img = floor_to( img, prec )
         if wr_files:
@@ -111,14 +111,14 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
         if wr_files:
             wr_img( [img], model_dir + "/dense_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_dense_" + str(i) + ".csv" )
-        bnvars = [ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ]
+        bnvars = [ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ] + bnvars[2:]
         img = compute_bn_relu( img, bnvars )
         img = floor_to( img, prec )
         if wr_files:
             wr_img( [img], model_dir + "/dense_bn_relu_img_lyr" + str(i) + ".csv" )
     dense_weights = rd_fp_weights_file( model_dir + "/vgg_dense_3.csv" )
     dense_weights = round_to( dense_weights, prec )
-    if dense_weights.shape[0] != 128: # remove bias row if included
+    if dense_weights.shape[0] != no_filt[-2]: # remove bias row if included
         dense_weights = dense_weights[1:,:]
     img = np.matmul( img, dense_weights )
     img = floor_to( img, prec )
@@ -163,7 +163,7 @@ Will binaraize the last conv layer and the dense layers""" )
                          help = "The parameter to use when trinarizing the conv layers" )
     parser.add_argument( "--nu_dense", type=float, default = 0.7,
                          help = "The parameter to use when trinarizing the dense layers" )
-    parser.add_argument( "--no_filt", type=int, default = 64,
+    parser.add_argument( "--no_filts", type=str, required = True,
                          help = "number of filters to use for vgg" )
     parser.add_argument( "--run_only", type=int, default = -1,
                          help = "number of iter to run, -1 => all" )
@@ -182,6 +182,7 @@ Will binaraize the last conv layer and the dense layers""" )
 if __name__ == "__main__":
     args = get_args()
     os.environ["CUDA_VISIBLE_DEVICES"]=args.gpus
+    no_filt = [ int(x) for x in args.no_filts.split(",") ]
     if args.dataset is not None:
         signal, label, snr = load_file( args.dataset )
         sess = tf.Session()
@@ -219,8 +220,8 @@ if __name__ == "__main__":
             x_in = rd_fp_weights_file( args.model_name + "/input_img.csv" )
         else:
             x_in = np.random.normal( 0, 1, [1024,2] ).astype( np.float32 )
-        tf_pred = run_tf_version( args.model_name, [x_in], args.nu_conv, args.nu_dense, args.no_filt, args.twn_incr_act )
-        np_pred = compute_network( args.model_name, x_in, args.no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files )
+        tf_pred = run_tf_version( args.model_name, [x_in], args.nu_conv, args.nu_dense, no_filt, args.twn_incr_act )
+        np_pred = compute_network( args.model_name, x_in, no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files )
         print( "tf_pred = ", tf_pred, tf_pred.shape )
         print( "np_pred = ", np_pred, np_pred.shape )
         print( "diff = ", np.abs( tf_pred - np_pred ) )
