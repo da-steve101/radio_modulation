@@ -25,7 +25,7 @@ NO_FILT=$(python3 -c "$SCRIPT")
 D1_IN=$(python3 -c "from math import ceil; print(ceil(8*$NO_FILT/512))")
 
 # extract the values from tensorflow
-python3 train_tnn/extract_weights_from_vgg.py --model_name $MODEL_DIR --nu_conv $NU_CONV --nu_dense $NU_DENSE --twn_incr_act $3 --d3_rshift $D3_PREC
+python3 train_tnn/extract_weights_from_vgg.py --model_name $MODEL_DIR --nu_conv $NU_CONV --nu_dense $NU_DENSE --d3_rshift $D3_PREC
 
 # create BN csvs
 for i in {1..7}

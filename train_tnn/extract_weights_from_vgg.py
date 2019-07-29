@@ -48,12 +48,9 @@ def get_bn_vars( sess, ops, lyr_name ):
     gamma_r, beta_r, mean_r, var_r = sess.run( [ gamma, beta, mean, var ] )
     return ( mean_r, var_r, gamma_r, beta_r )
 
-def write_bn( sess, ops, lyr_name, act_prec, eta_r ):
+def write_bn( sess, ops, lyr_name, eta_r ):
     mean, var, gamma, beta = get_bn_vars( sess, ops, lyr_name )
-    if act_prec is None:
-        abvars = twn.get_AB( mean, var, gamma, beta, eta_r )
-    else:
-        abvars = twn.get_AB_quantized( mean, var, gamma, beta, eta_r, is_round = True )
+    abvars = twn.get_AB( mean, var, gamma, beta, eta_r )
     f = open( "vgg_bn_" + lyr_name + ".csv", "w" )
     wrt = csv.writer( f )
     for row in abvars:
@@ -78,8 +75,6 @@ def get_args():
                          help="Nu for conv layers")
     parser.add_argument( "--nu_dense", type = float, default = 0.7,
                          help="Nu for the dense layers")
-    parser.add_argument( "--twn_incr_act", type = int, default = -1,
-                         help="Number of bin act layers followed by incr precision, -1 is no quantization")
     parser.add_argument( "--d3_rshift", type=int, default = 6,
                          help = "Number of fractional bits for 3rd dense layer" )
     return parser.parse_args()
@@ -97,22 +92,18 @@ if __name__ == "__main__":
     os.chdir( args.model_name ) # put all files in this dir
 
     nu = [ 0.7 ] + [ args.nu_conv ]*6 + [ args.nu_dense ]*2
-    if args.twn_incr_act == -1:
-        act_prec = None
-    else:
-        act_prec = [1]*args.twn_incr_act + [ 1 << ( i + 1 ) for i in range(6-args.twn_incr_act) ] + [1]*3
     for lyr_idx in range( 1, 8 ):
         conv_filter = get_conv_filter( ops, lyr_idx )
         lyr_name = "lyr" + str(lyr_idx)
         eta_r = decode_twn( sess, conv_filter, nu[lyr_idx-1], "vgg_conv_" + lyr_name + ".csv" )
-        write_bn( sess, ops, lyr_name, act_prec, eta_r )
+        write_bn( sess, ops, lyr_name, eta_r )
 
     # do the dense layers
     for dense_var, dense_lyr in [ ("dense_8", 1), ("dense_9", 2) ]:
         dense_mat = get_dense_mat( ops, dense_var )
         lyr_name = "dense_" + str(dense_lyr)
         eta_r = decode_twn( sess, dense_mat, nu[6+dense_lyr], "vgg_" + lyr_name + ".csv" )
-        write_bn( sess, ops, lyr_name, act_prec, eta_r )
+        write_bn( sess, ops, lyr_name, eta_r )
 
     kernel = [ op for op in ops if "dense_3/dense/kernel" in op.name and op.type == "VariableV2" ][0].outputs[0]
     kernel_r = sess.run( kernel )
