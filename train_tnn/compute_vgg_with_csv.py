@@ -109,7 +109,7 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
             if i <= incr_act:
                 bn_quant_precs[i] = ( 1, True )
             else:
-                bn_quant_precs[i] = (bn_quant_precs[i - 1][0] + 1, True )
+                bn_quant_precs[i] = (bn_quant_precs[i - 1][0] << 1, True )
             if i - incr_act >= 3:
                 bn_quant_precs[i] = ( prec, False )
         # force last conv to have binary activations
@@ -124,7 +124,7 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
         if wr_files:
             wr_img( img, model_dir + "/conv_mp_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_lyr" + str(i) + ".csv" )
-        bnvars = np.array([ round_to( bnvars[0,:], bn_p + 10 ), round_to( bnvars[1,:], bn_p + 10 + prec ) ] + bnvars[2:,:].tolist())
+        bnvars = np.array([ round_to( bnvars[0,:], bn_p ), round_to( bnvars[1,:], bn_p + prec ) ])
         # if incr_act < 0 then no quantization at all
         # if i - incr_act >= 4 then also no quantization as more that 16 bits
         do_q = ( incr_act > 0 ) and ( ( i - incr_act < 4 ) or i == 7 )
@@ -138,7 +138,7 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
         if wr_files:
             wr_img( [img], model_dir + "/dense_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_dense_" + str(i) + ".csv" )
-        bnvars = [ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ] + bnvars[2:]
+        bnvars = np.array([ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ])
         img = compute_bn_relu( img, bnvars, incr_act > 0, ( 1, True ), ( 1, True ) )
         img = floor_to( img, prec )
         if wr_files:
