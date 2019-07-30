@@ -13,8 +13,8 @@ def run_tf_version( model_name, x_in, nu_conv, nu_dense, no_filt, twn_incr_act =
     x = tf.placeholder( tf.float32, [1,1024,2] )
     nu = [0.7] + [nu_conv]*6 + [nu_dense]*2
     if twn_incr_act > -1:
-        act_prec = [1]*twn_incr_act + [ ( i + 2 ) for i in range(6-twn_incr_act) ] + [1]*3
-        act_prec = [ x if x < 4 else None for x in act_prec ]
+        act_prec = [1]*twn_incr_act + [ 1 << ( i + 1 ) for i in range(6-twn_incr_act) ] + [1]*3
+        act_prec = [ x if x < 16 else None for x in act_prec ]
     else:
         act_prec = None
     vgg_pred = Vgg10.get_net( x, False, act_prec = act_prec, nu = nu, no_filt = no_filt )
