@@ -258,8 +258,8 @@ if __name__ == "__main__":
         pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = no_filt )
     elif args.twn_incr_act is not None:
         # last conv and dense layers should be bin
-        act_prec = [1]*args.twn_incr_act + [ 1 << ( i + 1 ) for i in range(6-args.twn_incr_act) ] + [1]*3
-        act_prec = [ x if x < 16 else None for x in act_prec ]
+        act_prec = [1]*args.twn_incr_act + [ ( i + 2 ) for i in range(6-args.twn_incr_act) ] + [1]*3
+        act_prec = [ x if x < 4 else None for x in act_prec ]
         pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = no_filt )
     else:
         tf.logging.log( tf.logging.ERROR, "Invalid arguments" )

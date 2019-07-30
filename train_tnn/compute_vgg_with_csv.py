@@ -13,8 +13,8 @@ def run_tf_version( model_name, x_in, nu_conv, nu_dense, no_filt, twn_incr_act =
     x = tf.placeholder( tf.float32, [1,1024,2] )
     nu = [0.7] + [nu_conv]*6 + [nu_dense]*2
     if twn_incr_act > -1:
-        act_prec = [1]*twn_incr_act + [ 1 << ( i + 1 ) for i in range(6-twn_incr_act) ] + [1]*3
-        act_prec = [ x if x < 16 else None for x in act_prec ]
+        act_prec = [1]*twn_incr_act + [ ( i + 2 ) for i in range(6-twn_incr_act) ] + [1]*3
+        act_prec = [ x if x < 4 else None for x in act_prec ]
     else:
         act_prec = None
     vgg_pred = Vgg10.get_net( x, False, act_prec = act_prec, nu = nu, no_filt = no_filt )
@@ -56,19 +56,21 @@ def rd_bn_file( fname ):
     f.close()
     return data
 
-def compute_bn_relu( img, bnvars, do_q = False, prec_in = 0, prec_out = 0 ):
+def compute_bn_relu( img, bnvars, do_q = False, prec_in = (0, False), prec_out = (0, False) ):
     a = bnvars[0]
     b = bnvars[1]
     if do_q:
-        x_min = floor_to( bnvars[2], prec_in )
-        x_max = ceil_to( bnvars[3], prec_in )
+        x_min = ceil_to( -b/a, prec_in[0], prec_in[1] )
+        x_max = floor_to( (1 - b)/a, prec_in[0], prec_in[1] )
         img_min = img <= x_min
         img_max = img >= x_max
+        b += 0.5/(( 1 << prec_out[0] ) - 1)
     img = a*img + b
+    img = floor_to( img, prec_out[0], prec_out[1] )
     if do_q:
-        img = floor_to( img, prec_out )
         img[img_min] = 0
         img[img_max] = 1
+        return img
     return img*(img > 0)
 
 def wr_img( img, fname ):
@@ -78,29 +80,40 @@ def wr_img( img, fname ):
         wrt.writerow( x )
     f.close()
 
-def floor_to( img, prec ):
-    return np.floor( img * ( 1 << prec ) )/( 1 << prec )
+def floor_to( img, prec, sub = False ):
+    scaling = ( 1 << prec )
+    if sub:
+        scaling -= 1
+    return np.floor( img * scaling )/scaling
 
-def ceil_to( img, prec ):
-    return np.ceil( img * ( 1 << prec ) )/( 1 << prec )
+def ceil_to( img, prec, sub = False ):
+    scaling = ( 1 << prec )
+    if sub:
+        scaling -= 1
+    return np.ceil( img * scaling )/scaling
 
-def round_to( img, prec ):
-    return np.round( img * ( 1 << prec ) )/( 1 << prec )
+def round_to( img, prec, sub = False ):
+    scaling = ( 1 << prec )
+    if sub:
+        scaling -= 1
+    return np.round( img * scaling )/scaling
 
 def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = False, incr_act = -1 ):
     img = x_in
     mean = np.mean(img, axis=0)
     img = ( img - mean )
     img = round_to( img, prec )
-    bn_quant_precs = [ prec ]*8
+    bn_quant_precs = [ (prec, False) ]*8
     if incr_act > 0:
         for i in range(1,8):
             if i <= incr_act:
-                bn_quant_precs[i] = 0
+                bn_quant_precs[i] = ( 1, True )
             else:
-                bn_quant_precs[i] += 1
-                if bn_quant_precs[i] >= 4:
-                    bn_quant_precs[i] = prec
+                bn_quant_precs[i] = (bn_quant_precs[i - 1][0] + 1, True )
+            if i - incr_act >= 3:
+                bn_quant_precs[i] = ( prec, False )
+        # force last conv to have binary activations
+        bn_quant_precs[-1] = ( 1, True )
     for i in range(1,8):
         conv_weights = rd_tri_weights_file( model_dir + "/vgg_conv_lyr" + str(i) + ".csv" )
         conv_weights = np.reshape( conv_weights, [ 3, -1, no_filt[i-1] ] )
@@ -111,12 +124,11 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
         if wr_files:
             wr_img( img, model_dir + "/conv_mp_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_lyr" + str(i) + ".csv" )
-        bnvars = np.array([ round_to( bnvars[0,:], bn_p ), round_to( bnvars[1,:], bn_p + prec ) ] + bnvars[2:,:].tolist())
+        bnvars = np.array([ round_to( bnvars[0,:], bn_p + 10 ), round_to( bnvars[1,:], bn_p + 10 + prec ) ] + bnvars[2:,:].tolist())
         # if incr_act < 0 then no quantization at all
         # if i - incr_act >= 4 then also no quantization as more that 16 bits
-        do_q = ( incr_act > 0 ) and ( i - incr_act < 4 )
+        do_q = ( incr_act > 0 ) and ( ( i - incr_act < 4 ) or i == 7 )
         img = compute_bn_relu( img, bnvars, do_q, bn_quant_precs[i-1], bn_quant_precs[i] )
-        img = floor_to( img, prec )
         if wr_files:
             wr_img( img, model_dir + "/conv_bn_relu_img_lyr" + str(i) + ".csv" )
     img = np.reshape( img, [-1] )
@@ -127,7 +139,7 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
             wr_img( [img], model_dir + "/dense_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_dense_" + str(i) + ".csv" )
         bnvars = [ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ] + bnvars[2:]
-        img = compute_bn_relu( img, bnvars, incr_act > 0, 0, 0 )
+        img = compute_bn_relu( img, bnvars, incr_act > 0, ( 1, True ), ( 1, True ) )
         img = floor_to( img, prec )
         if wr_files:
             wr_img( [img], model_dir + "/dense_bn_relu_img_lyr" + str(i) + ".csv" )
