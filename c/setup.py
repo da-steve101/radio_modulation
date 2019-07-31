@@ -11,7 +11,8 @@ c_files += [ m_dir + "/" + f for f in os.listdir(m_dir) if f[-2:] == ".c" ]
 
 module1 = Extension('pyvgg',
                     define_macros = [('PYTHON_MOD', '1'),
-                                     ('D3_PREC', '6')],
+                                     ('D3_PREC', '6'),
+                                     ('MODEL_DIR', '"%s"' % m_dir )],
                     include_dirs = [m_dir],
                     sources = c_files )
 
