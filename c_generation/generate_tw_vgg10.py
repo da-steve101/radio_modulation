@@ -66,10 +66,10 @@ if __name__ == "__main__":
             q_outs[6] = (0,1)
         q_outs[7:9] = [(0,1)]*2
     for idx in range( 1, 8 ):
-        #make_conv( idx, model_dir )
+        make_conv( idx, model_dir )
         make_bn( idx, model_dir, r_shift = r_shifts[idx-1], quantize_out = q_outs[idx-1] )
     for idx in range( 1, 3 ):
-        #make_dense( idx, model_dir )
+        make_dense( idx, model_dir )
         make_bn( idx, model_dir, f_type = "dense_", r_shift = r_shifts[idx+6], quantize_out = q_outs[idx+6] )
     twn.write_matrix_to_c_ary( model_dir + "/input_img.csv" )
     twn.write_matrix_to_c_ary( model_dir + "/vgg_dense_3.csv" )
