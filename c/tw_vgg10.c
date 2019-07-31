@@ -64,14 +64,14 @@ struct network_vars {
 typedef struct network_vars * n_vars;
 n_vars n = &net_vars;
 
-short * convert_float( const float img[], short * img_out, int prec, int len, int filts, char use_round ) {
+short * convert_float( const float img[], short * img_out, int scale, int len, int filts, char use_round ) {
   int i,j;
   for ( i = 0; i < len; i++ ) {
     for ( j = 0; j < filts; j++ ) {
       if ( use_round )
-	img_out[i*filts + j] = (short) roundf( img[i*filts + j] * ( 1 << prec ) );
+	img_out[i*filts + j] = (short) roundf( img[i*filts + j] * scale );
       else
-	img_out[i*filts + j] = (short) ( img[i*filts + j] * ( 1 << prec ) );
+	img_out[i*filts + j] = (short) ( img[i*filts + j] * scale );
     }
   }
   return img_out;
@@ -158,7 +158,7 @@ void allocate_network( int prec ) {
   n = (n_vars)MALLOC_FUNC(sizeof(struct network_vars));
   n->prec = prec;
   n->dense3_vars = (short*)MALLOC_FUNC(sizeof(short)*VGG_DENSE_3_LEN*VGG_DENSE_3_FILT);
-  convert_float( vgg_dense_3, n->dense3_vars, prec, VGG_DENSE_3_LEN, VGG_DENSE_3_FILT, 1 );
+  convert_float( vgg_dense_3, n->dense3_vars, 1 << prec, VGG_DENSE_3_LEN, VGG_DENSE_3_FILT, 1 );
   n->convs[0] = conv1;
   n->convs[1] = conv2;
   n->convs[2] = conv3;
@@ -248,12 +248,12 @@ short * compute_network( const short * img ) {
 int main( int argc, char ** argv ) {
   // expected
   short * img_expect = (short*)malloc(sizeof(short)*OUTPUT_LEN*OUTPUT_FILT );
-  convert_float( OUTPUT_IMG, img_expect, PREC, OUTPUT_LEN, OUTPUT_FILT, 0 );
+  convert_float( OUTPUT_IMG, img_expect, ( 1 << PREC ), OUTPUT_LEN, OUTPUT_FILT, 0 );
 
   // input
   int img_len = IMG_LEN;
   short * img = (short*)malloc(sizeof(short)*img_len*IMG_FILT );
-  convert_float( input_img, img, PREC, img_len, IMG_FILT, 0 );
+  convert_float( input_img, img, 1 << PREC, img_len, IMG_FILT, 0 );
 
   allocate_network( PREC );
   short * output = compute_network( img );

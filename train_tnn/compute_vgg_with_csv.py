@@ -56,22 +56,46 @@ def rd_bn_file( fname ):
     f.close()
     return data
 
-def compute_bn_relu( img, bnvars, do_q = False, prec_in = (0, False), prec_out = (0, False) ):
+def compute_bn_relu( img, bnvars, bn_p, prec_in, prec_out ):
     a = bnvars[0]
     b = bnvars[1]
-    if do_q:
-        x_min = ceil_to( -b/a, prec_in[0], prec_in[1] )
-        x_max = floor_to( (1 - b)/a, prec_in[0], prec_in[1] )
-        img_min = img <= x_min
-        img_max = img >= x_max
-        b += 0.5/(( 1 << prec_out[0] ) - 1)
+    scale_in = ( 1 << prec_in[0] ) - prec_in[1]
+    scale_out = ( 1 << prec_out[0] ) - prec_out[1]
+    bn_scale = ( 1 << bn_p )
+    # image as int - matches input
+    img = np.round( img*scale_in ).astype(int)
+    if prec_in[1] and prec_out[1]: # if in and out are quantized
+        a = np.round( a*bn_scale*scale_out/scale_in ).astype(int)
+        b = np.round( (scale_out*b + 0.5)*bn_scale ).astype(int)
+    elif prec_in[1]: # if prev lyr was quantized and this isn't
+        a = np.round( a*bn_scale*scale_out/scale_in ).astype(int)
+        b = np.round( (scale_out*b + 0.5)*bn_scale ).astype(int)
+    elif prec_out[1]: # if the prev layer wasnt quantized and this layer is
+        a = np.round( a * bn_scale ).astype(int)
+        b = np.round( ( b + 0.5 ) * scale_in * bn_scale ).astype(int)
+    else: # if the previous layer and this one arent quantized
+        a = np.round( a*bn_scale ).astype(int)
+        b = np.round( (scale_out*b + 0.5)*bn_scale ).astype(int)
     img = a*img + b
-    img = floor_to( img, prec_out[0], prec_out[1] )
-    if do_q:
-        img[img_min] = 0
-        img[img_max] = 1
-        return img
-    return img*(img > 0)
+    if prec_in[1] and prec_out[1]: # if in and out are quantized
+        img = np.floor( img/bn_scale ).astype( int )
+        img = img / scale_out
+        img[img <= 0 ] = 0
+        img[img >= 1] = 1
+    elif prec_in[1]: # if prev lyr was quantized and this isn't
+        img = np.floor( img/bn_scale ).astype( int )
+        img = img / scale_out
+        img = img*(img > 0)
+    elif prec_out[1]: # if the prev layer wasnt quantized and this layer is
+        img = np.floor( img/(bn_scale*scale_in) ).astype( int )
+        img = img / scale_out
+        img[img <= 0 ] = 0
+        img[img >= 1] = 1
+    else: # if the previous layer and this one arent quantized
+        img = np.floor( img/bn_scale ).astype( int )
+        img = img / scale_out
+        img = img*(img > 0)
+    return ( img, a, b )
 
 def wr_img( img, fname ):
     f = open( fname, "w" )
@@ -80,40 +104,33 @@ def wr_img( img, fname ):
         wrt.writerow( x )
     f.close()
 
-def floor_to( img, prec, sub = False ):
-    scaling = ( 1 << prec )
-    if sub:
-        scaling -= 1
-    return np.floor( img * scaling )/scaling
+def floor_to( img, prec ):
+    return np.floor( img * ( 1 << prec ) )/( 1 << prec )
 
-def ceil_to( img, prec, sub = False ):
-    scaling = ( 1 << prec )
-    if sub:
-        scaling -= 1
-    return np.ceil( img * scaling )/scaling
+def ceil_to( img, prec ):
+    return np.ceil( img * ( 1 << prec ) )/( 1 << prec )
 
-def round_to( img, prec, sub = False ):
-    scaling = ( 1 << prec )
-    if sub:
-        scaling -= 1
-    return np.round( img * scaling )/scaling
+def round_to( img, prec ):
+    return np.round( img * ( 1 << prec ) )/( 1 << prec )
 
 def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = False, incr_act = -1 ):
     img = x_in
     mean = np.mean(img, axis=0)
     img = ( img - mean )
     img = round_to( img, prec )
-    bn_quant_precs = [ (prec, False) ]*8
+    bn_quant_precs = [ (prec, 0) ]*10
     if incr_act > 0:
         for i in range(1,8):
             if i <= incr_act:
-                bn_quant_precs[i] = ( 1, True )
+                bn_quant_precs[i] = ( 1, 1 )
             else:
-                bn_quant_precs[i] = (bn_quant_precs[i - 1][0] << 1, True )
-            if i - incr_act >= 3:
-                bn_quant_precs[i] = ( prec, False )
-        # force last conv to have binary activations
-        bn_quant_precs[-1] = ( 1, True )
+                bn_quant_precs[i] = ( 2**(i - incr_act), 1 )
+            if i - incr_act >= 4:
+                bn_quant_precs[i] = ( prec, 0 )
+        # force last conv and dense to have binary activations
+        bn_quant_precs[-3] = ( 1, 1 )
+        bn_quant_precs[-2] = ( 1, 1 )
+        bn_quant_precs[-1] = ( 1, 1 )
     for i in range(1,8):
         conv_weights = rd_tri_weights_file( model_dir + "/vgg_conv_lyr" + str(i) + ".csv" )
         conv_weights = np.reshape( conv_weights, [ 3, -1, no_filt[i-1] ] )
@@ -124,11 +141,9 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
         if wr_files:
             wr_img( img, model_dir + "/conv_mp_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_lyr" + str(i) + ".csv" )
-        bnvars = np.array([ round_to( bnvars[0,:], bn_p ), round_to( bnvars[1,:], bn_p + prec ) ])
-        # if incr_act < 0 then no quantization at all
-        # if i - incr_act >= 4 then also no quantization as more that 16 bits
-        do_q = ( incr_act > 0 ) and ( ( i - incr_act < 4 ) or i == 7 )
-        img = compute_bn_relu( img, bnvars, do_q, bn_quant_precs[i-1], bn_quant_precs[i] )
+        img, a, b = compute_bn_relu( img, bnvars, bn_p, bn_quant_precs[i-1], bn_quant_precs[i] )
+        if wr_files:
+            wr_img( [a,b], model_dir + "/vgg_bn_lyr" + str(i) + "_a_b.csv" )
         if wr_files:
             wr_img( img, model_dir + "/conv_bn_relu_img_lyr" + str(i) + ".csv" )
     img = np.reshape( img, [-1] )
@@ -138,9 +153,9 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
         if wr_files:
             wr_img( [img], model_dir + "/dense_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_dense_" + str(i) + ".csv" )
-        bnvars = np.array([ round_to( bnvars[0], bn_p ), round_to( bnvars[1], bn_p + prec ) ])
-        img = compute_bn_relu( img, bnvars, incr_act > 0, ( 1, True ), ( 1, True ) )
-        img = floor_to( img, prec )
+        img, a, b = compute_bn_relu( img, bnvars, bn_p, bn_quant_precs[i+7], bn_quant_precs[i+7] )
+        if wr_files:
+            wr_img( [a,b], model_dir + "/vgg_bn_dense_" + str(i) + "_a_b.csv" )
         if wr_files:
             wr_img( [img], model_dir + "/dense_bn_relu_img_lyr" + str(i) + ".csv" )
     dense_weights = rd_fp_weights_file( model_dir + "/vgg_dense_3.csv" )
