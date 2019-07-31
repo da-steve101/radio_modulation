@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "tw_vgg10.h"
 
 #include "conv1.h"
@@ -63,11 +64,14 @@ struct network_vars {
 typedef struct network_vars * n_vars;
 n_vars n = &net_vars;
 
-short * convert_float( const float img[], short * img_out, int prec, int len, int filts ) {
+short * convert_float( const float img[], short * img_out, int prec, int len, int filts, char use_round ) {
   int i,j;
   for ( i = 0; i < len; i++ ) {
     for ( j = 0; j < filts; j++ ) {
-      img_out[i*filts + j] = (short) ( img[i*filts + j] * ( 1 << prec ) );
+      if ( use_round )
+	img_out[i*filts + j] = (short) roundf( img[i*filts + j] * ( 1 << prec ) );
+      else
+	img_out[i*filts + j] = (short) ( img[i*filts + j] * ( 1 << prec ) );
     }
   }
   return img_out;
@@ -128,7 +132,11 @@ short * compute_d3() {
     int tmp_sum = 0;
     for ( j = 0; j < VGG_DENSE_3_LEN; j++ )
       tmp_sum += n->dense3_vars[j*VGG_DENSE_3_FILT + i]*n->d[1][j];
+#ifdef USE_D3_RSHIFT
     n->d[2][i] = (short)(tmp_sum >> n->prec);
+#else
+    n->d[2][i] = (short)(tmp_sum);
+#endif
   }
   return n->d[2];
 }
@@ -150,7 +158,7 @@ void allocate_network( int prec ) {
   n = (n_vars)MALLOC_FUNC(sizeof(struct network_vars));
   n->prec = prec;
   n->dense3_vars = (short*)MALLOC_FUNC(sizeof(short)*VGG_DENSE_3_LEN*VGG_DENSE_3_FILT);
-  convert_float( vgg_dense_3, n->dense3_vars, prec, VGG_DENSE_3_LEN, VGG_DENSE_3_FILT );
+  convert_float( vgg_dense_3, n->dense3_vars, prec, VGG_DENSE_3_LEN, VGG_DENSE_3_FILT, 1 );
   n->convs[0] = conv1;
   n->convs[1] = conv2;
   n->convs[2] = conv3;
@@ -240,24 +248,27 @@ short * compute_network( const short * img ) {
 int main( int argc, char ** argv ) {
   // expected
   short * img_expect = (short*)malloc(sizeof(short)*OUTPUT_LEN*OUTPUT_FILT );
-  convert_float( OUTPUT_IMG, img_expect, PREC, OUTPUT_LEN, OUTPUT_FILT );
+  convert_float( OUTPUT_IMG, img_expect, PREC, OUTPUT_LEN, OUTPUT_FILT, 0 );
 
   // input
   int img_len = IMG_LEN;
   short * img = (short*)malloc(sizeof(short)*img_len*IMG_FILT );
-  convert_float( input_img, img, PREC, img_len, IMG_FILT );
+  convert_float( input_img, img, PREC, img_len, IMG_FILT, 0 );
 
   allocate_network( PREC );
   short * output = compute_network( img );
 
   int i,j;
+  int fail_cnt = 0;
   for ( i = 0; i < OUTPUT_LEN; i++ ) {
     for ( j = 0; j < OUTPUT_FILT; j++ ) {
-      if ( output[i*OUTPUT_FILT+j] != img_expect[i*OUTPUT_FILT+j] )
+      if ( output[i*OUTPUT_FILT+j] != img_expect[i*OUTPUT_FILT+j] ) {
 	printf( "FAILED: (%d,%d) where %d != %d\n", i, j, output[i*OUTPUT_FILT+j], img_expect[i*OUTPUT_FILT+j] );
+	fail_cnt += 1;
+      }
     }
   }
-
+  printf( "%d total fails\n", fail_cnt );
   free_network( n );
   return 0;
 }

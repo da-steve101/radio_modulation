@@ -177,7 +177,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument( "--model_name", type = str, required = True,
                          help="The model name to train or test")
-    parser.add_argument( "--results_name", type = str, required = True,
+    parser.add_argument( "--results_name", type = str,
                          help="The csv to output test results")
     parser.add_argument( "--dataset", type = str, nargs = "*",
                          help="The test rcrds to test against")
@@ -211,6 +211,7 @@ if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"]=args.gpus
     no_filt = [ int(x) for x in args.no_filts.split(",") ]
     if args.dataset is not None:
+        assert args.results_name is not None, "--results_name must be used if dataset mode"
         signal, label, snr = load_file( args.dataset )
         sess = tf.Session()
         cntr_ary = {}
