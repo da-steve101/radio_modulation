@@ -306,8 +306,12 @@ maxpool
 bn_relu_fp
 #(
   .NO_CH(BN1_CH),
-  .BW(BW),
-  .R_SHIFT(R_SHIFT)
+  .BW_IN(BW),
+  .BW_OUT(BW),
+  .BW_A(BN1_BW_A),
+  .BW_B(BN1_BW_B),
+  .R_SHIFT(BN1_RSHIFT),
+  .MAXVAL(BN1_MAXVAL)
 ) bn_relu1 (
 .clk(clk),
 .rst(rst),
@@ -359,8 +363,12 @@ maxpool
 bn_relu_fp
 #(
   .NO_CH(BN2_CH),
-  .BW(BW),
-  .R_SHIFT(R_SHIFT)
+  .BW_IN(BW),
+  .BW_OUT(BW),
+  .BW_A(BN2_BW_A),
+  .BW_B(BN2_BW_B),
+  .R_SHIFT(BN2_RSHIFT),
+  .MAXVAL(BN2_MAXVAL)
 ) bn_relu2 (
 .clk(clk),
 .rst(rst),
@@ -427,8 +435,12 @@ maxpool
 bn_relu_fp
 #(
   .NO_CH(BN3_CH),
-  .BW(BW),
-  .R_SHIFT(R_SHIFT)
+  .BW_IN(BW),
+  .BW_OUT(BW),
+  .BW_A(BN3_BW_A),
+  .BW_B(BN3_BW_B),
+  .R_SHIFT(BN3_RSHIFT),
+  .MAXVAL(BN3_MAXVAL)
 ) bn_relu3 (
 .clk(clk),
 .rst(rst),
@@ -495,8 +507,12 @@ maxpool
 bn_relu_fp
 #(
   .NO_CH(BN4_CH),
-  .BW(BW),
-  .R_SHIFT(R_SHIFT)
+  .BW_IN(BW),
+  .BW_OUT(BW),
+  .BW_A(BN4_BW_A),
+  .BW_B(BN4_BW_B),
+  .R_SHIFT(BN4_RSHIFT),
+  .MAXVAL(BN4_MAXVAL)
 ) bn_relu4 (
 .clk(clk),
 .rst(rst),
@@ -563,8 +579,12 @@ maxpool
 bn_relu_fp
 #(
   .NO_CH(BN5_CH),
-  .BW(BW),
-  .R_SHIFT(R_SHIFT)
+  .BW_IN(BW),
+  .BW_OUT(BW),
+  .BW_A(BN5_BW_A),
+  .BW_B(BN5_BW_B),
+  .R_SHIFT(BN5_RSHIFT),
+  .MAXVAL(BN5_MAXVAL)
 ) bn_relu5 (
 .clk(clk),
 .rst(rst),
@@ -631,8 +651,12 @@ maxpool
 bn_relu_fp
 #(
   .NO_CH(BN6_CH),
-  .BW(BW),
-  .R_SHIFT(R_SHIFT)
+  .BW_IN(BW),
+  .BW_OUT(BW),
+  .BW_A(BN6_BW_A),
+  .BW_B(BN6_BW_B),
+  .R_SHIFT(BN6_RSHIFT),
+  .MAXVAL(BN6_MAXVAL)
 ) bn_relu6 (
 .clk(clk),
 .rst(rst),
@@ -699,8 +723,12 @@ maxpool
 bn_relu_fp
 #(
   .NO_CH(BN7_CH),
-  .BW(BW),
-  .R_SHIFT(R_SHIFT)
+  .BW_IN(BW),
+  .BW_OUT(BW),
+  .BW_A(BN7_BW_A),
+  .BW_B(BN7_BW_B),
+  .R_SHIFT(BN7_RSHIFT),
+  .MAXVAL(BN7_MAXVAL)
 ) bn_relu7 (
 .clk(clk),
 .rst(rst),
@@ -747,9 +775,13 @@ dense_layer_fp
 
 bn_relu_fp
 #(
-  .NO_CH(D1_CH),
-  .BW(BW),
-  .R_SHIFT(R_SHIFT)
+  .NO_CH(BND1_CH),
+  .BW_IN(BW),
+  .BW_OUT(BW),
+  .BW_A(BND1_BW_A),
+  .BW_B(BND1_BW_B),
+  .R_SHIFT(BND1_RSHIFT),
+  .MAXVAL(BND1_MAXVAL)
 ) bn_relu_d1 (
 .clk(clk),
 .rst(rst),
@@ -795,9 +827,13 @@ dense_layer_fp
 
 bn_relu_fp
 #(
-  .NO_CH(D2_CH),
-  .BW(BW),
-  .R_SHIFT(R_SHIFT)
+  .NO_CH(BND2_CH),
+  .BW_IN(BW),
+  .BW_OUT(BW),
+  .BW_A(BND2_BW_A),
+  .BW_B(BND2_BW_B),
+  .R_SHIFT(BND2_RSHIFT),
+  .MAXVAL(BND2_MAXVAL)
 ) bn_relu_d2 (
 .clk(clk),
 .rst(rst),
