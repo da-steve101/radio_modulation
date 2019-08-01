@@ -28,6 +28,9 @@
 #include <Python.h>
 #endif
 
+// if the second last dense layer isn't binary set
+// #define USE_D3_RSHIFT
+
 #ifdef PYTHON_MOD
 #define MALLOC_FUNC PyMem_Malloc
 #define FREE_FUNC PyMem_Free

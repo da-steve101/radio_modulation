@@ -243,7 +243,7 @@ if __name__ == "__main__":
             for i in iterator:
                 x_in, y, z = sess.run( [ signal, label, snr ] )
                 if args.wr_files:
-                    wr_img( x_in, args.model_name + "/input_img.csv")
+                    wr_img( x_in, args.model_name + "/../input_img.csv")
                 np_pred = compute_network( args.model_name, x_in, args.no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files )
                 preds = np.argmax( np_pred )
                 if z not in cntr_ary:
@@ -259,8 +259,8 @@ if __name__ == "__main__":
                 if z in cntr_ary:
                     print( "accr[" + str(z) + "] = " + str( 100*correct_ary[z]/cntr_ary[z] ) )
     else:
-        if os.path.exists( args.model_name + "/input_img.csv" ):
-            x_in = rd_fp_weights_file( args.model_name + "/input_img.csv" )
+        if os.path.exists( args.model_name + "/../input_img.csv" ):
+            x_in = rd_fp_weights_file( args.model_name + "/../input_img.csv" )
         else:
             x_in = np.random.normal( 0, 1, [1024,2] ).astype( np.float32 )
         tf_pred = run_tf_version( args.model_name, [x_in], args.nu_conv, args.nu_dense, no_filt, args.twn_incr_act )
