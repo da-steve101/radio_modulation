@@ -3,33 +3,34 @@
 module multiply_accumulate_fp
   #(
     parameter LOG2_NO_VECS = 2,
-    parameter BW = 16,
+    parameter BW_IN = 16,
+    parameter BW_OUT = 16,
     parameter BW_W = 2,
     parameter R_SHIFT = 0,
     parameter DEBUG_FLAG = 0,
+    parameter USE_UNSIGNED_DATA = 0,
     parameter NUM_CYC = 32
 ) (
-   input 				     clk,
-   input 				     new_sum,
-   input [(1 << LOG2_NO_VECS)-1:0][BW-1:0]   data_in,
-   input [(1 << LOG2_NO_VECS)-1:0][BW_W-1:0] w_vec,
-   output [BW-1:0] 			     data_out
+   input 				      clk,
+   input 				      new_sum,
+   input [(1 << LOG2_NO_VECS)-1:0][BW_IN-1:0] data_in,
+   input [(1 << LOG2_NO_VECS)-1:0][BW_W-1:0]  w_vec,
+   output [BW_OUT-1:0] 			      data_out
 );
-localparam LOG2_NO_IN = ( LOG2_NO_VECS - 1 > 0 ) ? LOG2_NO_VECS - 1 : 0;
-reg [(1 << LOG2_NO_IN)-1:0][R_SHIFT+BW-1:0] mult_res;
-wire [R_SHIFT+BW-1:0] shift_res;
-assign data_out = shift_res[R_SHIFT+BW-1:R_SHIFT];
+reg signed [(1 << LOG2_NO_VECS)-1:0][R_SHIFT+BW_OUT-1:0] mult_res;
+wire [R_SHIFT+BW_OUT-1:0] shift_res;
+assign data_out = shift_res[R_SHIFT+BW_OUT-1:R_SHIFT];
 genvar i;
 generate
-for ( i = 0; i < 1 << LOG2_NO_IN; i++ ) begin
+for ( i = 0; i < 1 << LOG2_NO_VECS; i++ ) begin
 always @( posedge clk ) begin
-   if ( LOG2_NO_VECS == 0 ) begin
-      mult_res[i] <= $signed( w_vec[0] ) * $signed( data_in[0] );
+   if ( USE_UNSIGNED_DATA ) begin
+      mult_res[i] <= $signed( w_vec[i]*data_in[i] );
    end else begin
-      mult_res[i] <= $signed( w_vec[2*i] ) * $signed( data_in[2*i] )  + $signed( w_vec[2*i+1] ) * $signed( data_in[2*i+1] );
+      mult_res[i] <= $signed( w_vec[i] ) * $signed( data_in[i] );
    end
    if ( DEBUG_FLAG ) begin
-      $display( "mult_res[%x] = %x", i, mult_res );
+      $display( "data_in[%x] = %x, w_vec = %x, mult_res[%x] = %x", i, data_in[i], w_vec, i, mult_res );
    end
 end
 end
@@ -43,9 +44,9 @@ always @( posedge clk ) begin
 end
 pipelined_accumulator
 #(
-  .IN_BITWIDTH(BW+R_SHIFT),
-  .OUT_BITWIDTH(BW+R_SHIFT),
-  .LOG2_NO_IN(LOG2_NO_IN)
+  .IN_BITWIDTH(R_SHIFT + BW_OUT),
+  .OUT_BITWIDTH(R_SHIFT + BW_OUT),
+  .LOG2_NO_IN(LOG2_NO_VECS)
 ) accum (
    .clk(clk),
    .new_sum( new_sum_reg ),

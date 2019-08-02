@@ -8,7 +8,8 @@ module bn_relu_fp
   parameter BW_A = 12,
   parameter BW_B = 12,
   parameter R_SHIFT = 6,
-  parameter MAXVAL = -1
+  parameter MAXVAL = -1,
+  parameter DEBUG = 0
 ) (
    input 			  clk,
    input 			  rst,
@@ -36,6 +37,10 @@ module bn_relu_fp
 	 reg 			 set_max, set_zero;
 	 assign data_out[i] = relu_i;
 	 always @( posedge clk ) begin
+	    if ( DEBUG ) begin
+	       $display( "vld_in = %x, data_in[%x] = %x, a[%x] = %x, b[%x] = %x, mult_i = %x, bias_i = %x, shift_i = %x, relu_i = %x",
+			 vld_in, i, data_in[i], i, a[i], i, b[i], mult_i, bias_i, shift_i, relu_i );
+	    end
 	    mult_i <= $signed( a[i] ) * $signed( data_in[i] );
 	    bias_i <= $signed(mult_i) + $signed(b[i]);
 	    set_zero <= $signed( bias_i ) < 0;
