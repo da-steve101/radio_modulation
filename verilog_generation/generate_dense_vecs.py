@@ -13,11 +13,14 @@ def format_hex( x, bits = 16 ):
 
 def get_weights( weights, bits, no_in ):
     w_vec = []
-    for i in range( 0, int(len(weights)/no_in) ):
-        tmp_w = np.reshape( np.transpose(weights[i*no_in:(i+1)*no_in]), [-1] )
-        hex_w = [ format_hex( x, bits ) for x in tmp_w ]
+    for i in range( weights.shape[1] ):
+        tmp_w = weights[:,i]
+        agg_vecs = np.reshape( np.concatenate( [ tmp_w[i::no_in] for i in range( no_in ) ] ), [ no_in, -1] )
+        agg_vecs = ( agg_vecs + ( 1 << bits ) ) % ( 1 << bits ) # make unsigned
+        mult_words = np.matmul( ( 1 << ( bits * np.array( range( no_in ) ) ) ), agg_vecs )
+        hex_w = [ format_hex( x, bits*no_in ) for x in mult_words ]
         w_vec += [ "{ " + ", ".join( reversed(hex_w) ) + " }" ]
-    return "{ " +  ", ".join( reversed(w_vec) ) + " }"
+    return w_vec
 
 if __name__ == "__main__":
     fname_w = sys.argv[1]
@@ -40,7 +43,11 @@ if __name__ == "__main__":
     f_out.write( "localparam LOG2_D%s_CYC = %d;\n" % ( lyr, log2_d1_cyc ) )
     f_out.write( "localparam D%s_CYC = %d;\n" % ( lyr, d1_cyc ) )
     f_out.write( "localparam D%s_CH = %d;\n" % ( lyr, weights.shape[1] ) )
-    f_out.write( "reg [D%s_CYC-1:0][D%s_IN_SIZE*D%s_CH-1:0][D%s_BW_W-1:0] dw_%s = " % ( lyr, lyr, lyr, lyr, lyr ) )
-    f_out.write( w_str )
-    f_out.write( ";\n" )
+    f_out.write( "reg [LOG2_D%s_CYC-1:0] d%s_cntr;\n" % ( lyr, lyr ) )
+    f_out.write( "wire [D%s_CH-1:0][D%s_IN_SIZE*D%s_BW_W-1:0] dw_%s;\n" % ( lyr, lyr, lyr, lyr ) )
+    for i, w in enumerate( w_str ):
+        f_out.write( "reg [D%s_CYC-1:0][D%s_IN_SIZE*D%s_BW_W-1:0] dw_%s_%d = " % ( lyr, lyr, lyr, lyr, i ) )
+        f_out.write( w )
+        f_out.write( ";\n" )
+        f_out.write( "assign dw_%s[%d] = dw_%s_%d[d%s_cntr];\n" % ( lyr, i, lyr, i, lyr ) )
     f_out.close()

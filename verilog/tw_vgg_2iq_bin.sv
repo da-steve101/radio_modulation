@@ -195,7 +195,6 @@ module tw_vgg_2iq_bin
    wire [D1_IN_SIZE*BN7_BW_OUT-1:0] ts7_out;
    wire [D1_CH-1:0][BND1_BW_IN-1:0] d1_out;
    wire 			    d1_vld;
-   reg [LOG2_D1_CYC-1:0] 	    d1_cntr;
    wire [BND1_CH-1:0][BND1_BW_OUT-1:0] bnd1_out;
    wire 			       bnd1_vld;
    wire [BND1_CH*BND1_BW_OUT-1:0]      tsd1_in;
@@ -204,14 +203,12 @@ module tw_vgg_2iq_bin
    wire [D2_IN_SIZE*BND1_BW_OUT-1:0]   tsd1_out;
    wire [D2_CH-1:0][BND2_BW_IN-1:0]    d2_out;
    wire 			       d2_vld;
-   reg [LOG2_D2_CYC-1:0] 	       d2_cntr;
    wire [BND2_CH-1:0][BND2_BW_OUT-1:0]  bnd2_out;
    wire 			       bnd2_vld;
    wire 			       tsd2_vld;
    wire [D3_IN_SIZE*BND2_BW_OUT-1:0]   tsd2_out;
    wire [D3_CH-1:0][BW-1:0] 	       d3_out;
    wire 			       d3_vld;
-   reg [LOG2_D3_CYC-1:0] 	       d3_cntr;
    always @( posedge clk ) begin
       if ( rst ) begin
 	 d1_cntr <= 0;
@@ -233,7 +230,7 @@ module tw_vgg_2iq_bin
 	    end
 	 end
 	 if ( tsd2_vld ) begin
-	    if ( d3_cntr == D1_CYC - 1 ) begin
+	    if ( d3_cntr == D3_CYC - 1 ) begin
 	       d3_cntr <= 0;
 	    end else begin
 	       d3_cntr <= d3_cntr + 1;
@@ -753,7 +750,7 @@ dense_layer_fp
 .rst(rst),
 .vld_in(ts7_vld),
 .data_in(ts7_out),
-.w_vec( dw_1[d1_cntr] ),
+.w_vec( dw_1 ),
 .vld_out(d1_vld),
 .data_out(d1_out)
 );
@@ -807,7 +804,7 @@ dense_layer_fp
 .rst(rst),
 .vld_in(tsd1_vld),
 .data_in(tsd1_out),
-.w_vec( dw_2[d2_cntr] ),
+.w_vec( dw_2 ),
 .vld_out(d2_vld),
 .data_out(d2_out)
 );
@@ -861,7 +858,7 @@ dense_layer_fp
 .rst(rst),
 .vld_in(tsd2_vld),
 .data_in(tsd2_out),
-.w_vec( dw_3[d3_cntr] ),
+.w_vec( dw_3 ),
 .vld_out(d3_vld),
 .data_out(d3_out)
 );

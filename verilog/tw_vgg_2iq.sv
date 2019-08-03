@@ -108,18 +108,24 @@ output [CH_OUT-1:0][BW-1:0] data_out
    wire 	     bn1_vld, bn2_vld, bn3_vld, bn4_vld, bn5_vld, bn6_vld, bn7_vld;
    wire 	     mp1_vld, mp2_vld, mp3_vld, mp4_vld, mp5_vld, mp6_vld, mp7_vld;
    wire [BN1_CH-1:0][W1_BW-1:0] mp1_in;
-   wire [BN1_CH-1:0][BW-1:0] c1_A_out, c1_B_out;
-   wire 		     c1_A_vld, c1_B_vld;
+   wire [BN1_CH-1:0][BW-1:0] 	c1_A_out, c1_B_out;
+   wire 			c1_A_vld, c1_B_vld;
    wire [BN2_CH-1:0][W2_BW-1:0] c2_out;
    wire 			c2_vld;
-   wire [BN3_CH-1:0][W3_BW-1:0]  ts2_out, c3_out;
-   wire 			 ts2_vld, c3_vld;
-   wire [BN4_CH-1:0][W4_BW-1:0]  ts3_out, c4_out;
-   wire 			 ts3_vld, c4_vld;
-   wire [BN5_CH-1:0][W5_BW-1:0]  ts4_out, c5_out;
-   wire 			 ts4_vld, c5_vld;
-   wire [BN6_CH-1:0][W6_BW-1:0]  ts5_out, c6_out, ts6_out, c7_out;
-   wire 			 ts5_vld, c6_vld, ts6_vld, c7_vld;
+   wire [BN2_CH-1:0][W3_BW-1:0] ts2_out;
+   wire [BN3_CH-1:0][W3_BW-1:0] c3_out;
+   wire 			ts2_vld, c3_vld;
+   wire [BN3_CH-1:0][W4_BW-1:0] ts3_out;
+   wire [BN4_CH-1:0][W4_BW-1:0] c4_out;
+   wire 			ts3_vld, c4_vld;
+   wire [BN4_CH-1:0][W5_BW-1:0] ts4_out;
+   wire [BN5_CH-1:0][W5_BW-1:0] c5_out;
+   wire 			ts4_vld, c5_vld;
+   wire [BN5_CH-1:0][W6_BW-1:0] ts5_out;
+   wire [BN6_CH-1:0][W6_BW-1:0] c6_out;
+   wire [BN6_CH-1:0][W7_BW-1:0] ts6_out;
+   wire [BN7_CH-1:0][W7_BW-1:0] c7_out;
+   wire 			ts5_vld, c6_vld, ts6_vld, c7_vld;
 
    // some hackery for when throughput is too low
    wire [BN7_CH-1:0][31:0] ts6_in;
@@ -197,32 +203,22 @@ output [CH_OUT-1:0][BW-1:0] data_out
 `include "dense_2.sv"
 `include "bnd2.sv"
 `include "dense_3.sv"
-
-   wire [BN7_CH*BW-1:0] ts7_in;
-   assign ts7_in = bn7_out;
    wire 		ts7_vld;
    wire [D1_IN_SIZE*BW-1:0] ts7_out;
    wire [D1_CH-1:0][BW-1:0] d1_out;
    wire 		    d1_vld;
-   reg [LOG2_D1_CYC-1:0]    d1_cntr;
    wire [BND1_CH-1:0][BW-1:0] bnd1_out;
    wire 		      bnd1_vld;
-   wire [BND1_CH*BW-1:0]      tsd1_in;
-   assign tsd1_in = bnd1_out;
    wire 		      tsd1_vld;
    wire [D2_IN_SIZE*BW-1:0]   tsd1_out;
    wire [D2_CH-1:0][BW-1:0]   d2_out;
    wire 		      d2_vld;
-   reg [LOG2_D2_CYC-1:0]      d2_cntr;
    wire [BND2_CH-1:0][BW-1:0] bnd2_out;
    wire 		      bnd2_vld;
-   wire [BND2_CH*BW-1:0]      tsd2_in;
-   assign tsd2_in = bnd2_out;
    wire 		      tsd2_vld;
    wire [D3_IN_SIZE*BW-1:0]   tsd2_out;
    wire [D3_CH-1:0][BW-1:0]   d3_out;
    wire 		  d3_vld;
-   reg [LOG2_D3_CYC-1:0]  d3_cntr;
    always @( posedge clk ) begin
       if ( rst ) begin
 	 d1_cntr <= 0;
@@ -244,7 +240,7 @@ output [CH_OUT-1:0][BW-1:0] data_out
 	    end
 	 end
 	 if ( tsd2_vld ) begin
-	    if ( d3_cntr == D1_CYC - 1 ) begin
+	    if ( d3_cntr == D3_CYC - 1 ) begin
 	       d3_cntr <= 0;
 	    end else begin
 	       d3_cntr <= d3_cntr + 1;
@@ -750,7 +746,7 @@ to_serial
 .clk(clk),
 .rst(rst),
 .vld_in(bn7_vld),
-.data_in(ts7_in),
+.data_in(bn7_out),
 .vld_out(ts7_vld),
 .data_out(ts7_out)
 );
@@ -759,16 +755,18 @@ dense_layer_fp
 #(
   .INPUT_SIZE(D1_IN_SIZE),
   .NUM_CYC(D1_CYC),
-  .BW(BW),
+  .BW_IN(BN7_BW_OUT),
+  .BW_OUT(BND1_BW_IN),
   .BW_W(D1_BW_W),
   .R_SHIFT(D1_SHIFT),
+  .DEBUG_FLAG( 0 ),
   .OUTPUT_SIZE(D1_CH)
 ) d1 (
 .clk(clk),
 .rst(rst),
 .vld_in(ts7_vld),
 .data_in(ts7_out),
-.w_vec( dw_1[d1_cntr] ),
+.w_vec( dw_1 ),
 .vld_out(d1_vld),
 .data_out(d1_out)
 );
@@ -802,7 +800,7 @@ to_serial
 .clk(clk),
 .rst(rst),
 .vld_in(bnd1_vld),
-.data_in(tsd1_in),
+.data_in(bnd1_out),
 .vld_out(tsd1_vld),
 .data_out(tsd1_out)
 );
@@ -811,7 +809,8 @@ dense_layer_fp
 #(
   .INPUT_SIZE(D2_IN_SIZE),
   .NUM_CYC( D2_CYC ),
-  .BW(BW),
+  .BW_IN(BND1_BW_OUT),
+  .BW_OUT(BND2_BW_IN),
   .BW_W(D2_BW_W),
   .R_SHIFT(D2_SHIFT),
   .OUTPUT_SIZE(D2_CH)
@@ -820,7 +819,7 @@ dense_layer_fp
 .rst(rst),
 .vld_in(tsd1_vld),
 .data_in(tsd1_out),
-.w_vec( dw_2[d2_cntr] ),
+.w_vec( dw_2 ),
 .vld_out(d2_vld),
 .data_out(d2_out)
 );
@@ -854,7 +853,7 @@ to_serial
 .clk(clk),
 .rst(rst),
 .vld_in(bnd2_vld),
-.data_in(tsd2_in),
+.data_in(bnd2_out),
 .vld_out(tsd2_vld),
 .data_out(tsd2_out)
 );
@@ -863,16 +862,18 @@ dense_layer_fp
 #(
   .INPUT_SIZE(D3_IN_SIZE),
   .NUM_CYC( D3_CYC ),
-  .BW(BW),
+  .BW_IN(BND2_BW_OUT),
+  .BW_OUT(BW),
   .BW_W(D3_BW_W),
   .R_SHIFT(D3_SHIFT),
+  .DEBUG_FLAG( 0 ),
   .OUTPUT_SIZE(D3_CH)
 ) d3 (
 .clk(clk),
 .rst(rst),
 .vld_in(tsd2_vld),
 .data_in(tsd2_out),
-.w_vec( dw_3[d3_cntr] ),
+.w_vec( dw_3 ),
 .vld_out(d3_vld),
 .data_out(d3_out)
 );

@@ -15,7 +15,7 @@ module dense_layer_fp
    input 					clk,
    input 					rst,
    input 					vld_in,
-   input [OUTPUT_SIZE*INPUT_SIZE-1:0][BW_W-1:0] w_vec,
+   input [OUTPUT_SIZE-1:0][INPUT_SIZE*BW_W-1:0] w_vec,
    input [INPUT_SIZE-1:0][BW_IN-1:0] 		data_in,
    output 					vld_out,
    output [OUTPUT_SIZE-1:0][BW_OUT-1:0] 	data_out
@@ -30,6 +30,7 @@ module dense_layer_fp
 
    always @( posedge clk ) begin
       if ( DEBUG_FLAG ) begin
+	 $display( "vld_in = %x, data_in = %x, w_vec = %x", vld_in, data_in, w_vec );
 	 $display( "vld_out = %x, data_out = %x", vld_out, data_out );
       end
       if ( rst ) begin
@@ -47,7 +48,7 @@ module dense_layer_fp
       for ( i = 0; i < OUTPUT_SIZE; i++ ) begin
 	 wire [BW_OUT-1:0] tmp_out;
 	 wire [INPUT_SIZE-1:0][BW_W-1:0] w_or_zero;
-	 assign w_or_zero = vld_in ? w_vec[i*INPUT_SIZE +: INPUT_SIZE] : 0;
+	 assign w_or_zero = vld_in ? w_vec[i] : 0;
 	 multiply_accumulate_fp
 	   #(
 	     .LOG2_NO_VECS( LOG2_NO_VECS ),
@@ -57,7 +58,7 @@ module dense_layer_fp
 	     .R_SHIFT(R_SHIFT),
 	     .NUM_CYC( NUM_CYC ),
 	     .USE_UNSIGNED_DATA( USE_UNSIGNED_DATA ),
-	     .DEBUG_FLAG( DEBUG_FLAG && i == 0 )
+	     .DEBUG_FLAG( DEBUG_FLAG & i == 0 )
 	     ) mac (
 		.clk(clk),
 		.new_sum(cntr == 0 ),
