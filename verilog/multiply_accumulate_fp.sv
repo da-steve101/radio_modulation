@@ -17,8 +17,9 @@ module multiply_accumulate_fp
    input [(1 << LOG2_NO_VECS)-1:0][BW_W-1:0]  w_vec,
    output [BW_OUT-1:0] 			      data_out
 );
-reg signed [(1 << LOG2_NO_VECS)-1:0][R_SHIFT+BW_OUT-1:0] mult_res;
-wire [R_SHIFT+BW_OUT-1:0] shift_res;
+localparam BW_E = ( R_SHIFT > BW_W ) ? R_SHIFT : BW_W;
+reg signed [(1 << LOG2_NO_VECS)-1:0][BW_E+BW_OUT-1:0] mult_res;
+wire [BW_E+BW_OUT-1:0] shift_res;
 assign data_out = shift_res[R_SHIFT+BW_OUT-1:R_SHIFT];
 genvar i;
 generate
@@ -44,8 +45,8 @@ always @( posedge clk ) begin
 end
 pipelined_accumulator
 #(
-  .IN_BITWIDTH(R_SHIFT + BW_OUT),
-  .OUT_BITWIDTH(R_SHIFT + BW_OUT),
+  .IN_BITWIDTH(BW_E + BW_OUT),
+  .OUT_BITWIDTH(BW_E + BW_OUT),
   .LOG2_NO_IN(LOG2_NO_VECS)
 ) accum (
    .clk(clk),

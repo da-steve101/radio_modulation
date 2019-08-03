@@ -21,8 +21,8 @@ if __name__ == "__main__":
     rdr = csv.reader( f )
     data = [ [ int( x ) for x in y ] for y in rdr ]
     # work out the bw needed
-    a_bw = math.ceil( math.log2( max([ abs(x) for x in data[0] ]) ) ) + 1
-    b_bw = math.ceil( math.log2( max([ abs(x) for x in data[1] ]) ) ) + 1
+    a_bw = math.ceil( math.log2( max([ abs(x) for x in data[0] ]) + 1) ) + 1
+    b_bw = math.ceil( math.log2( max([ abs(x) for x in data[1] ]) + 1) ) + 1
     CH_IN = len(data[0])
     a_hex = list(reversed([ format_hex(x, a_bw) for x in data[0] ]))
     b_hex = list(reversed([ format_hex(x, b_bw) for x in data[1] ]))

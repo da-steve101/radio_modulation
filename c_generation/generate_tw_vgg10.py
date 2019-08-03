@@ -71,7 +71,7 @@ if __name__ == "__main__":
     for idx in range( 1, 3 ):
         make_dense( idx, model_dir )
         make_bn( idx, model_dir, f_type = "dense_", r_shift = r_shifts[idx+6], quantize_out = q_outs[idx+6] )
-    twn.write_matrix_to_c_ary( model_dir + "/input_img.csv" )
+    twn.write_matrix_to_c_ary( model_dir + "/../input_img.csv" )
     if q_outs[8] == (None, None):
         twn.write_matrix_to_c_ary( model_dir + "/vgg_dense_3.csv", "#define USE_D3_RSHIFT" )
     else:

@@ -95,7 +95,6 @@ def get_optimizer( pred, label, learning_rate, resnet_pred = None ):
         student_err = tf.sqrt( tf.nn.l2_loss( resnet_pred - pred ) )/5
         tf.summary.scalar( "student_err", student_err )
         err = student_err + err
-    if resnet_pred is not None:
         teacher_err = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels = label,
             logits = resnet_pred,

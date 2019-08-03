@@ -21,6 +21,7 @@ module bn_relu_fp
    output [NO_CH-1:0][BW_OUT-1:0] data_out
 );
    reg [3:0] 		      vld_sr;
+   localparam BITS_MAX = ( R_SHIFT > BW_A ) ? R_SHIFT : BW_A;
    assign vld_out = vld_sr[3];
    always @( posedge clk ) begin
       if ( rst ) begin
@@ -32,7 +33,7 @@ module bn_relu_fp
    genvar 		      i;
    generate
       for ( i = 0; i < NO_CH; i++ ) begin
-	 reg signed [BW_IN+BW_A-1:0] mult_i, bias_i;
+	 reg signed [BW_IN+BITS_MAX-1:0] mult_i, bias_i;
 	 reg signed [BW_OUT-1:0] shift_i, relu_i;
 	 reg 			 set_max, set_zero;
 	 assign data_out[i] = relu_i;
@@ -44,7 +45,7 @@ module bn_relu_fp
 	    mult_i <= $signed( a[i] ) * $signed( data_in[i] );
 	    bias_i <= $signed(mult_i) + $signed(b[i]);
 	    set_zero <= $signed( bias_i ) < 0;
-	    set_max <= $signed( bias_i[BW_IN+BW_A-1:R_SHIFT] ) > MAXVAL;
+	    set_max <= $signed( bias_i[BW_IN+BITS_MAX-1:R_SHIFT] ) > MAXVAL;
 	    shift_i <= bias_i[BW_OUT+R_SHIFT-1:R_SHIFT];
 	    if ( set_zero ) begin
 	       relu_i <= 0;

@@ -5,7 +5,7 @@ import csv
 import sys
 import os
 
-def make_conv( idx, bw, create_op, model_dir ):
+def make_conv( idx, bw_in, bw_out, create_op, model_dir ):
     f_in = model_dir + "/vgg_conv_lyr%d.csv" % idx
     f_tree = model_dir + "/vgg_conv_lyr%d_td_cse.csv" % idx
     mod_out = "conv%d" % idx
@@ -16,20 +16,25 @@ def make_conv( idx, bw, create_op, model_dir ):
         twn.write_output( f_tree, matrix, initial_no_adds, no_in, no_out )
         twn.verify_tree( f_in, f_tree )
     f = open( f_out, "w" )
-    f.write( twn.SMM_generate( f_tree, mod_out, bw, bw, create_op ) )
+    f.write( twn.SMM_generate( f_tree, mod_out, bw_in, bw_out, create_op ) )
     f.close()
+
+def map_to_ops( op_str, model_dir ):
+    ops = []
+    for c in op_str:
+        if c == "n":
+            ops += [ twn.create_normal_add_op ]
+        if c == "s":
+            twn.write_serial_adder_module( model_dir +  "/serial_adder.sv" )
+            ops += [ twn.create_serial_add_op ]
+        if c == "p":
+            ops += [ twn.create_pop_count_op ]
+    return ops
 
 if __name__ == "__main__":
     model_dir = sys.argv[1]
-    no_px = 2
-    for idx in range( 1, 8 ):
-        if idx < no_px + 1:
-            create_op = twn.create_normal_add_op
-            bw = 16
-        else:
-            twn.write_serial_adder_module( model_dir +  "/serial_adder.sv" )
-            create_op = twn.create_serial_add_op
-            bw = int( 16 / ( 1 << ( idx - no_px ) ) )
-            if bw < 1:
-                bw = 1
-        make_conv( idx, bw, create_op, model_dir )
+    bws_in = [ int(x) for x in sys.argv[2].split(",") ]
+    bws_out = [ int(x) for x in sys.argv[3].split(",") ]
+    ops = map_to_ops( sys.argv[4], model_dir )
+    for i, bw_in, bw_out, op in zip( range( len(bws_in) ), bws_in, bws_out, ops ):
+        make_conv( i+1, bw_in, bw_out, op, model_dir )
