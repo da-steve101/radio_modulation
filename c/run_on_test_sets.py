@@ -7,6 +7,19 @@ import tqdm
 import sys
 import pyvgg
 import os
+import argparse
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument( "--test_pattern", type = str, default = "/opt/datasets/deepsig/modulation_classification_test_snr_%d.rcrd",
+                         help="The file location pattern of the test set")
+    parser.add_argument( "--file_out", type = str, required = True,
+                         help="The filename to write the classifications to")
+    parser.add_argument( "--niter", type = int, default = 410*24*26,
+                         help="Number of iterations to run on the rcrd")
+    parser.add_argument( "--no_mean", action = 'store_true',
+                         help="Do not remove the mean from the signal")
+    return parser.parse_args()
 
 def parse_example( ex ):
     ftrs = {
@@ -33,22 +46,25 @@ def test_vec( x ):
     return pyvgg.compute( x )
 
 if __name__ == "__main__":
-    test_ptn = "/opt/datasets/deepsig/modulation_classification_test_snr_%d.rcrd"
-    res_file = sys.argv[1]
-    signal, label, snr = load_file( [ test_ptn % snr for snr in range( -20, 32, 2 ) ] )
+    test_ptn = args.test_pattern
+    if "%d" in test_ptn:
+        pattern_files = [ test_ptn % snr for snr in range( -20, 32, 2 ) ]
+    else:
+        pattern_files = [ test_ptn ]
+    signal, label, snr = load_file( pattern_files )
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     with tf.Session() as sess:
         cntr_ary = {}
         correct_ary = {}
-        f = open( res_file, "w" )
+        f = open( args.file_out, "w" )
         wrt = csv.writer( f )
         try:
-            nIter = 410*24*26
-            iterator = tqdm.tqdm( range( nIter ) )
+            iterator = tqdm.tqdm( range( args.niter ) )
             for i in iterator:
-                x_in, y, z = sess.run( [ signal, label, snr ] )
-                mean = np.mean( x_in, axis=0)
-                img = ( x_in - mean )
+                img, y, z = sess.run( [ signal, label, snr ] )
+                if not args.no_mean:
+                    mean = np.mean( img, axis=0)
+                    img = ( img - mean )
                 np_pred = test_vec( img )
                 preds = np.argmax( np_pred )
                 if z not in cntr_ary:

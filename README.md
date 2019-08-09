@@ -22,9 +22,9 @@ The directory [train_tnn](train_tnn) contains all scripts to train the models in
 [c](c) has code to implement quantized cnn components to mimic the precision of the verilog.
 It also has files to create a python module for a given model.
 
-Running
--------
+## Running
 
+#### Verilog
 The following command
 ```bash
 ./generate_networks.sh
@@ -38,6 +38,7 @@ and for [incremental activations](verilog/tw_vgg_2iq_incr.sv).
 They have corresponding testbenches for the [default twn](verilog_test/tw_vgg_2iq_test.sv), for [binary activations](verilog/tw_vgg_2iq_bin_test.sv)
 and for [incremental activations](verilog/tw_vgg_2iq_incr_test.sv).
 
+#### C
 In the c directory
 ```bash
 export MODEL_DIR=../models/vgg_twn_nu_1.2_0.7_bin_64
@@ -55,3 +56,11 @@ Q_data = np.random.randint( -300, 300, [1024] )
 x = np.concatenate( [ I_data, Q_data] ).tolist()
 y = pyvgg.compute( x ) # compute the prediction in C
 ```
+
+To test the quantized performance on all models run
+```bash
+./test_quant.sh
+```
+
+## Citations
+TODO: citation for paper
