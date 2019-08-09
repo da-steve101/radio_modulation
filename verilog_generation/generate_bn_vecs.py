@@ -37,7 +37,7 @@ if __name__ == "__main__":
     CH_IN = len(data[0])
     a_str, a_bw = make_hex( data[0] )
     b_str, b_bw = make_hex( data[1] )
-    f_out = open( sys.argv[2], "w" )
+    f_out = open( args.file_out, "w" )
     bn_id_u = args.bn_id.upper()
     f_out.write( "localparam BN%s_CH = %d;\n" % ( bn_id_u, CH_IN ))
     f_out.write( "localparam BN%s_BW_A = %d;\n" % ( bn_id_u, a_bw ))
