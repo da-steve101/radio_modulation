@@ -29,12 +29,13 @@ def residual_stack( x, no_filt, training = False ):
 def get_initializer():
     return tf.variance_scaling_initializer(scale=1.0, mode='fan_in')
 
-def get_net( x, training = False, no_filt = 64 ):
+def get_net( x, training = False, no_filt = 64, remove_mean = True ):
     # remove the bias from all examples and make
-    mean, var = tf.nn.moments(x, axes=[1])
-    mean = tf.expand_dims( mean, 1 )
-    mean = tf.tile( mean, [ 1, x.get_shape()[1], 1 ] )
-    x = ( x - mean )
+    if remove_mean:
+        mean, var = tf.nn.moments(x, axes=[1])
+        mean = tf.expand_dims( mean, 1 )
+        mean = tf.tile( mean, [ 1, x.get_shape()[1], 1 ] )
+        x = ( x - mean )
     with tf.variable_scope("block_1"):
         cnn = residual_stack( x, no_filt, training = training )
     with tf.variable_scope("block_2"):

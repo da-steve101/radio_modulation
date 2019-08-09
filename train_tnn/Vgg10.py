@@ -31,11 +31,12 @@ def get_conv_layer( x, training, no_filt = 128, nu = None, act_prec = True ):
         cnn = tf.nn.relu( cnn )
     return cnn
 
-def get_net( x, training = False, use_SELU = False, act_prec = None, nu = None, no_filt = 64 ):
-    mean, var = tf.nn.moments(x, axes=[1])
-    mean = tf.expand_dims( mean, 1 )
-    mean = tf.tile( mean, [ 1, x.get_shape()[1], 1 ] )
-    x = ( x - mean )
+def get_net( x, training = False, use_SELU = False, act_prec = None, nu = None, no_filt = 64, remove_mean = True ):
+    if remove_mean:
+        mean, var = tf.nn.moments(x, axes=[1])
+        mean = tf.expand_dims( mean, 1 )
+        mean = tf.tile( mean, [ 1, x.get_shape()[1], 1 ] )
+        x = ( x - mean )
     if nu is None:
         nu = [None]*9
     if act_prec is None:

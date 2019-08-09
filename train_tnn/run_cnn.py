@@ -188,6 +188,8 @@ def get_args():
                          help = "The number of training steps" )
     parser.add_argument( "--test", action = "store_true",
                          help = "Test the model on this dataset" )
+    parser.add_argument( "--no_mean", action = "store_true",
+                         help = "Do not remove the mean of the signal before processing" )
     parser.add_argument( "--test_output", type = str,
                          help = "Filename to save the output in csv format ( pred, label )" )
     parser.add_argument( "--test_batches", type = int, default = math.ceil( 410*24/64 ),
@@ -247,19 +249,19 @@ if __name__ == "__main__":
         no_filt = [ int(x) for x in args.no_filts.split(",") ]
     if args.resnet:
         with tf.variable_scope("teacher"):
-            pred = resnet.get_net( signal, training = training )
+            pred = resnet.get_net( signal, training = training, remove_mean = not args.no_mean )
     elif args.full_prec:
-        pred = Vgg10.get_net( signal, training, use_SELU = True, act_prec = None, nu = None, no_filt = no_filt )
+        pred = Vgg10.get_net( signal, training, use_SELU = True, act_prec = None, nu = None, no_filt = no_filt, remove_mean = not args.no_mean )
     elif args.twn:
-        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = None, nu = nu, no_filt = no_filt )
+        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = None, nu = nu, no_filt = no_filt, remove_mean = not args.no_mean )
     elif args.twn_binary_act:
         act_prec = [1]*9
-        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = no_filt )
+        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = no_filt, remove_mean = not args.no_mean )
     elif args.twn_incr_act is not None:
         # last conv and dense layers should be bin
         act_prec = [1]*args.twn_incr_act + [ 1 << ( i + 1 ) for i in range(6-args.twn_incr_act) ] + [1]*3
         act_prec = [ x if x < 16 else None for x in act_prec ]
-        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = no_filt )
+        pred = Vgg10.get_net( signal, training, use_SELU = False, act_prec = act_prec, nu = nu, no_filt = no_filt, remove_mean = not args.no_mean )
     else:
         tf.logging.log( tf.logging.ERROR, "Invalid arguments" )
         exit()
@@ -270,7 +272,7 @@ if __name__ == "__main__":
         resnet_pred = None
         if args.teacher_name is not None:
             with tf.variable_scope("teacher"):
-                resnet_pred = tf.stop_gradient( resnet.get_net( signal, training = False ) )
+                resnet_pred = tf.stop_gradient( resnet.get_net( signal, training = False, remove_mean = not args.no_mean ) )
             resnet_saver = tf.train.Saver( tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="teacher") )
         if args.teacher_dset:
             resnet_pred = teacher
