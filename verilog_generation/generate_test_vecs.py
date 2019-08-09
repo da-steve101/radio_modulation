@@ -30,13 +30,14 @@ if __name__ == "__main__":
     f_out = open( args.file_out, "w" )
     data = common.get_data_from_csv( args.file_in, args.mul, True )
     CH_IN = len(data[0])
+    cntr_bw = int( math.ceil( math.log2( len(data) ) ) )
     hex_data = [ list(reversed([ common.format_hex(x, args.bw)  for x in y ])) for y in data ]
     vecs = [ "{ " + ", ".join( x ) + " }" for x in hex_data ]
     signal_str = "{" + ", ".join( vecs ) + "};"
     f_out.write( "localparam BW_%s = %d;\n" % ( sfx, args.bw ) )
     f_out.write( "localparam CH_%s = %d;\n" % ( sfx, CH_IN ) )
     f_out.write( "localparam SIG_LEN_%s = %d;\n" % ( sfx, len(data) ) )
-    f_out.write( "localparam CNTR_BW_%s = $clog2( %d );\n" % (sfx, len(data) ) )
+    f_out.write( "localparam CNTR_BW_%s = %d;\n" % (sfx, cntr_bw ) )
     f_out.write( "wire [CH_%s-1:0][BW_%s-1:0] signal_%s [SIG_LEN_%s] = " % ( sfx, sfx, sfx.lower(), sfx ) )
     f_out.write( signal_str );
     f_out.close()
