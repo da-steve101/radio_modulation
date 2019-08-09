@@ -20,7 +20,7 @@ python3 generate_bn_vecs.py --file_in $MODEL_DIR/vgg_bn_lyr$i"_a_b.csv" --file_o
 done
 for i in {1..2}
 do
-python3 generate_bn_vecs.py --file_in $MODEL_DIR/vgg_bn_dense_$i"_a_b.csv" --file_out $MODEL_DIR/bnd$i.sv --bn_id D$i --rshift $BN_PREC --bw_in 16 --bw_out 16
+python3 generate_bn_vecs.py --file_in $MODEL_DIR/vgg_bn_dense_$i"_a_b.csv" --file_out $MODEL_DIR/bnd$i.sv --bn_id d$i --rshift $BN_PREC --bw_in 16 --bw_out 16
 python3 generate_dense_vecs.py --file_in $MODEL_DIR/vgg_dense_$i.csv --file_out $MODEL_DIR/dense_$i.sv --lyr $i --bw_w 2
 done
 python3 generate_dense_vecs.py --file_in $MODEL_DIR/vgg_dense_3.csv --file_out $MODEL_DIR/dense_3.sv --lyr 3 --rshift $PREC --bw_w 16
