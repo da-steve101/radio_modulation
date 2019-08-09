@@ -8,7 +8,7 @@ SHIFT=$(( PREC + BN_PREC ))
 cd ../train_tnn
 python3 extract_weights_from_vgg.py --model_name $MODEL_DIR
 python3 compute_vgg_with_csv.py --model_name $MODEL_DIR --nu_conv 1.2 --nu_dense 0.7 --prec $PREC \
- --bn_p $BN_PREC --wr_files --no_filts 128,128,128,128,128,128,128,512,512,24 --remove_mean
+ --bn_p $BN_PREC --wr_files --no_filts 128,128,128,128,128,128,128,512,512,24 --remove_mean --twn_incr_act 1
 cd ../verilog_generation
 
 python3 generate_bn_vecs.py --file_in $MODEL_DIR/vgg_bn_lyr1_a_b.csv --file_out $MODEL_DIR/bn1.sv --bn_id 1 --rshift $BN_PREC --bw_in 16 --bw_out 1 --maxval 1
