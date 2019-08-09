@@ -56,7 +56,7 @@ def rd_bn_file( fname ):
     f.close()
     return data
 
-def compute_bn_relu( img, bnvars, bn_p, prec_in, prec_out ):
+def compute_bn_relu( img, bnvars, bn_p, prec_in, prec_out, img_prec = 0 ):
     a = bnvars[0]
     b = bnvars[1]
     scale_in = ( 1 << prec_in[0] ) - prec_in[1]
@@ -75,26 +75,24 @@ def compute_bn_relu( img, bnvars, bn_p, prec_in, prec_out ):
         b = np.round( ( b + 0.5 ) * scale_in * bn_scale ).astype(int)
     else: # if the previous layer and this one arent quantized
         a = np.round( a*bn_scale ).astype(int)
-        b = np.round( (scale_out*b + 0.5)*bn_scale ).astype(int)
+        b = np.round( (scale_in*b + 0.5)*bn_scale ).astype(int)
     img = a*img + b
+    img = np.floor( img >> img_prec ) # cut off extra precision on input
     if prec_in[1] and prec_out[1]: # if in and out are quantized
         img = np.floor( img/bn_scale ).astype( int )
         img = img / scale_out
-        img[img <= 0 ] = 0
         img[img >= 1] = 1
     elif prec_in[1]: # if prev lyr was quantized and this isn't
         img = np.floor( img/bn_scale ).astype( int )
         img = img / scale_out
-        img = img*(img > 0)
     elif prec_out[1]: # if the prev layer wasnt quantized and this layer is
         img = np.floor( img/(bn_scale*scale_in) ).astype( int )
         img = img / scale_out
-        img[img <= 0 ] = 0
         img[img >= 1] = 1
     else: # if the previous layer and this one arent quantized
         img = np.floor( img/bn_scale ).astype( int )
         img = img / scale_out
-        img = img*(img > 0)
+    img = img*(img > 0)
     return ( img, a, b )
 
 def wr_img( img, fname ):
@@ -113,12 +111,15 @@ def ceil_to( img, prec ):
 def round_to( img, prec ):
     return np.round( img * ( 1 << prec ) )/( 1 << prec )
 
-def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = False, incr_act = -1 ):
-    img = x_in
-    mean = np.mean(img, axis=0)
-    img = ( img - mean )
-    img = round_to( img, prec )
+def compute_network( model_dir, img, no_filt, prec = 4, bn_p = 6, wr_files = False, incr_act = -1, img_prec = 0, remove_mean = True ):
+    if remove_mean:
+        mean = np.mean(img, axis=0)
+        img = ( img - mean )
+    img = round_to( img, prec + img_prec )
+    if wr_files:
+       wr_img( img, model_dir + "/conv_img_lyr0.csv" )
     bn_quant_precs = [ (prec, 0) ]*10
+    bn_quant_precs[0] = (prec + img_prec, 0)
     if incr_act > 0:
         for i in range(1,8):
             if i <= incr_act:
@@ -141,7 +142,8 @@ def compute_network( model_dir, x_in, no_filt, prec = 4, bn_p = 6, wr_files = Fa
         if wr_files:
             wr_img( img, model_dir + "/conv_mp_img_lyr" + str(i) + ".csv" )
         bnvars = rd_bn_file( model_dir + "/vgg_bn_lyr" + str(i) + ".csv" )
-        img, a, b = compute_bn_relu( img, bnvars, bn_p, bn_quant_precs[i-1], bn_quant_precs[i] )
+        img, a, b = compute_bn_relu( img, bnvars, bn_p, bn_quant_precs[i-1], bn_quant_precs[i], img_prec )
+        img_prec = 0 # after the first layer dont need anymore
         if wr_files:
             wr_img( [a,b], model_dir + "/vgg_bn_lyr" + str(i) + "_a_b.csv" )
         if wr_files:
@@ -213,12 +215,16 @@ Will binaraize the last conv layer and the dense layers""" )
                          help = "number of fractional bits in activations" )
     parser.add_argument( "--bn_p", type=int, default = 6,
                          help = "number of fractional bits in bn vars" )
+    parser.add_argument( "--img_prec", type=int, default = 0,
+                         help = "Amount to shift image the for the input in addition to prec" )
     parser.add_argument( "--wr_files", action='store_true',
                          help = "write files stages" )
     parser.add_argument( "--show_progress", action='store_true',
                          help = "show progress in test set" )
     parser.add_argument( "--gpus", type=str, default = "",
                          help = "GPUs to use" )
+    parser.add_argument( "--remove_mean", action='store_true',
+                         help = "Remove the mean from the image before running" )
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -244,7 +250,10 @@ if __name__ == "__main__":
                 x_in, y, z = sess.run( [ signal, label, snr ] )
                 if args.wr_files:
                     wr_img( x_in, args.model_name + "/../input_img.csv")
-                np_pred = compute_network( args.model_name, x_in, args.no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files )
+                np_pred = compute_network( args.model_name, x_in, no_filt, prec = args.prec,
+                                           bn_p = args.bn_p, wr_files = args.wr_files,
+                                           incr_act = args.twn_incr_act, img_prec = args.img_prec,
+                                           remove_mean = args.remove_mean )
                 preds = np.argmax( np_pred )
                 if z not in cntr_ary:
                     cntr_ary[z] = 0
@@ -264,7 +273,10 @@ if __name__ == "__main__":
         else:
             x_in = np.random.normal( 0, 1, [1024,2] ).astype( np.float32 )
         tf_pred = run_tf_version( args.model_name, [x_in], args.nu_conv, args.nu_dense, no_filt, args.twn_incr_act )
-        np_pred = compute_network( args.model_name, x_in, no_filt, prec = args.prec, bn_p = args.bn_p, wr_files = args.wr_files, incr_act = args.twn_incr_act )
+        np_pred = compute_network( args.model_name, x_in, no_filt, prec = args.prec,
+                                   bn_p = args.bn_p, wr_files = args.wr_files,
+                                   incr_act = args.twn_incr_act, img_prec = args.img_prec,
+                                   remove_mean = args.remove_mean )
         print( "tf_pred = ", tf_pred, tf_pred.shape )
         print( "np_pred = ", np_pred, np_pred.shape )
         print( "diff = ", np.abs( tf_pred - np_pred ) )

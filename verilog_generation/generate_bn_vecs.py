@@ -3,43 +3,51 @@
 import csv
 import sys
 import math
+import argparse
+import common
 
-def format_hex( x, bits = 16 ):
-    chars = int( math.ceil( bits / 4 ) )
-    if x < 0:
-        x += (1 << bits)
-    return str(bits) + "'h" + f"{x:0{chars}x}"
-    
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument( "--file_in", type = str, required = True,
+                         help="A CSV with the quantized shifted (a,b) values ( must be ints )")
+    parser.add_argument( "--file_out", type = str, required = True,
+                         help="The filename to write the quantized verilog output to")
+    parser.add_argument( "--bn_id", type = str, required = True,
+                         help="A unique ID for the BN ( normally the layer index )")
+    parser.add_argument("--rshift", type=int, default = 0,
+                        help = "The rshift to do after calculating BN-RELU before outputting it" )
+    parser.add_argument("--bw_in", type=int, default = 16,
+                        help = "What bitwidth to expect at the input" )
+    parser.add_argument("--bw_out", type=int, default = 16,
+                        help = "What bitwidth to produce at the output" )
+    parser.add_argument("--maxval", type=int, default = -1,
+                        help = "The max value to output from the BN, -1 is disabled ( default )" )
+    return parser.parse_args()
+
+def make_hex( data ):
+    bw = math.ceil( math.log2( max([ abs(x) for x in data ]) + 1) ) + 1
+    data_hex = list(reversed([ common.format_hex(x, bw) for x in data ]))
+    data_str = "{ " + ", ".join( data_hex ) + " }"
+    return data_str, bw
+
 if __name__ == "__main__":
-    f = open( sys.argv[1] )
-    bn_id = sys.argv[3]
-    bn_rshift = int(sys.argv[4])
-    bn_bw_in = int(sys.argv[5])
-    bn_bw_out = int(sys.argv[6])
-    bn_maxval = int(sys.argv[7])
-    lyr_bw_out = int(sys.argv[8])
-    rdr = csv.reader( f )
-    data = [ [ int( x ) for x in y ] for y in rdr ]
+    args = get_args()
+    data = common.get_data_from_csv( args.file_in, use_int = True )
     # work out the bw needed
-    a_bw = math.ceil( math.log2( max([ abs(x) for x in data[0] ]) + 1) ) + 1
-    b_bw = math.ceil( math.log2( max([ abs(x) for x in data[1] ]) + 1) ) + 1
     CH_IN = len(data[0])
-    a_hex = list(reversed([ format_hex(x, a_bw) for x in data[0] ]))
-    b_hex = list(reversed([ format_hex(x, b_bw) for x in data[1] ]))
-    a_str = "{ " + ", ".join( a_hex ) + " }"
-    b_str = "{ " + ", ".join( b_hex ) + " }"
+    a_str, a_bw = make_hex( data[0] )
+    b_str, b_bw = make_hex( data[1] )
     f_out = open( sys.argv[2], "w" )
-    bn_id_u = bn_id.upper()
-    f_out.write( "localparam BN%s_CH = %d;\n" % ( bn_id_u, CH_IN ));
-    f_out.write( "localparam BN%s_BW_A = %d;\n" % ( bn_id_u, a_bw ));
-    f_out.write( "localparam BN%s_BW_B = %d;\n" % ( bn_id_u, b_bw ));
-    f_out.write( "localparam BN%s_RSHIFT = %d;\n" % ( bn_id_u, bn_rshift ));
-    f_out.write( "localparam BN%s_BW_IN = %d;\n" % ( bn_id_u, bn_bw_in ));
-    f_out.write( "localparam BN%s_BW_OUT = %d;\n" % ( bn_id_u, bn_bw_out ));
-    f_out.write( "localparam BN%s_MAXVAL = %d;\n" % ( bn_id_u, bn_maxval ));
-    f_out.write( "localparam LYR%s_BW_OUT = %d;\n" % ( bn_id_u, lyr_bw_out ));
-    f_out.write( "reg [BN%s_CH-1:0][BN%s_BW_A-1:0] bn%s_a = " % ( bn_id_u, bn_id_u, bn_id ));
+    bn_id_u = args.bn_id.upper()
+    f_out.write( "localparam BN%s_CH = %d;\n" % ( bn_id_u, CH_IN ))
+    f_out.write( "localparam BN%s_BW_A = %d;\n" % ( bn_id_u, a_bw ))
+    f_out.write( "localparam BN%s_BW_B = %d;\n" % ( bn_id_u, b_bw ))
+    f_out.write( "localparam BN%s_RSHIFT = %d;\n" % ( bn_id_u, args.rshift ))
+    f_out.write( "localparam BN%s_BW_IN = %d;\n" % ( bn_id_u, args.bw_in ))
+    f_out.write( "localparam BN%s_BW_OUT = %d;\n" % ( bn_id_u, args.bw_out ))
+    f_out.write( "localparam BN%s_MAXVAL = %d;\n" % ( bn_id_u, args.maxval ))
+    f_out.write( "reg [BN%s_CH-1:0][BN%s_BW_A-1:0] bn%s_a = " % ( bn_id_u, bn_id_u, args.bn_id ))
     f_out.write( a_str + ";\n" )
-    f_out.write( "reg [BN%s_CH-1:0][BN%s_BW_B-1:0] bn%s_b = " % ( bn_id_u, bn_id_u, bn_id ));
+    f_out.write( "reg [BN%s_CH-1:0][BN%s_BW_B-1:0] bn%s_b = " % ( bn_id_u, bn_id_u, args.bn_id ))
     f_out.write( b_str + ";\n" )
     f_out.close()

@@ -4,6 +4,19 @@ import twn_generator as twn
 import csv
 import sys
 import os
+import argparse
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument( "--model_dir", type = str, required = True,
+                         help="The directory where the .csv's of the model are stored")
+    parser.add_argument("--bws_in", type=str, required = True,
+                        help = "A list of bws for input seperated by commas as a single string, eg) 16,16,1,1,1,1,4" )
+    parser.add_argument("--bws_out", type=str, required = True,
+                        help = "A list of bws for output seperated by commas as a single string" )
+    parser.add_argument("-t", "--adder_types", type=str, required = True,
+                        help = "A list adder types to use: n => full adders, s => serial adders, p => popcounts" )
+    return parser.parse_args()
 
 def make_conv( idx, bw_in, bw_out, create_op, model_dir ):
     f_in = model_dir + "/vgg_conv_lyr%d.csv" % idx
@@ -32,9 +45,10 @@ def map_to_ops( op_str, model_dir ):
     return ops
 
 if __name__ == "__main__":
-    model_dir = sys.argv[1]
-    bws_in = [ int(x) for x in sys.argv[2].split(",") ]
-    bws_out = [ int(x) for x in sys.argv[3].split(",") ]
-    ops = map_to_ops( sys.argv[4], model_dir )
+    args = get_args()
+    bws_in = [ int(x) for x in args.bws_in.split(",") ]
+    bws_out = [ int(x) for x in args.bws_out.split(",") ]
+    ops = map_to_ops( args.adder_types, args.model_dir )
+    assert len(bws_in) == len(bws_out) and len(bws_in) == len(ops), "Must have same length for bws_in, bws_out and adder_types"
     for i, bw_in, bw_out, op in zip( range( len(bws_in) ), bws_in, bws_out, ops ):
-        make_conv( i+1, bw_in, bw_out, op, model_dir )
+        make_conv( i+1, bw_in, bw_out, op, args.model_dir )
