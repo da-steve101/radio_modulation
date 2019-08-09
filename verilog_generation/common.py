@@ -9,7 +9,7 @@ def unsigned( x, bits = 16 ):
 def format_hex( x, bits = 16 ):
     chars = int( math.ceil( bits / 4 ) )
     x = unsigned( x, bits )
-    return str(bits) + "'h" + f"{x:0{chars}x}"
+    return ("%d'h{:0%dx}" % ( bits, chars ) ).format(x)
 
 def get_data_from_csv( fname, mul = 1, use_int = False ):
     f = open( fname )
