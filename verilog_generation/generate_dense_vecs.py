@@ -28,7 +28,7 @@ def get_weights( weights, bits, no_in ):
     for i in range( weights.shape[1] ):
         tmp_w = weights[:,i]
         agg_vecs = np.reshape( np.concatenate( [ tmp_w[i::no_in] for i in range( no_in ) ] ), [ no_in, -1] )
-        agg_vecs = common.unsigned( agg_vecs )
+        agg_vecs = common.unsigned( agg_vecs, bits )
         mult_words = np.matmul( ( 1 << ( bits * np.array( range( no_in ) ) ) ), agg_vecs )
         hex_w = [ common.format_hex( x, bits*no_in ) for x in mult_words ]
         w_vec += [ "{ " + ", ".join( reversed(hex_w) ) + " }" ]
