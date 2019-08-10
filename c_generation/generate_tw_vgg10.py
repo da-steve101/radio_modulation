@@ -5,6 +5,19 @@ import csv
 import sys
 import os
 import numpy as np
+import argparse
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument( "--model_dir", type = str, required = True,
+                         help="The directory where the .csv's of the model are stored")
+    parser.add_argument("--twn_incr_act", type=int, default=-1,
+                        help = "The number of layers with binary activations, -1 => disabled ( default )" )
+    parser.add_argument("--bn_p", type=int, default=8,
+                        help = "The BN rshift amount" )
+    parser.add_argument("--prec", type=int, default=6,
+                        help = "The precision of activations" )
+    return parser.parse_args()
 
 def make_conv( idx, model_dir ):
     f_in = model_dir + "/vgg_conv_lyr%d.csv" % idx
@@ -43,20 +56,17 @@ def make_bn( idx, model_dir, f_type = "lyr", r_shift = 8, quantize_out = None ):
         twn.write_bn_relu_to_c( f_a_b, r_shift, f_out )
 
 if __name__ == "__main__":
-    model_dir = sys.argv[1]
-    twn_incr = int(sys.argv[2])
-    r_shifts = [8]*9
+    args = get_args()
     q_outs = [( None, None )]*9
-    PREC = 6
-    if twn_incr > 0: # if quantized
+    if args.twn_incr_act > 0: # if quantized
         # always do dense layers as 1 bit
-        q_outs[0] = (PREC, 1) # first layer needs to shift as 6 frac bits in from image
+        q_outs[0] = (args.prec, 1) # first layer needs to shift as 6 frac bits in from image
         # leave a, b and r as is for first layer
-        for i in range( 1, twn_incr ):
+        for i in range( 1, args.twn_incr_act ):
             q_outs[i] = (0,1) # binary layer
-        for i in range( twn_incr, 6 ):
-            q_outs[i] = (0, ( 1 << (2**( i - twn_incr + 1 ) )) - 1 )
-        for i in range( twn_incr, 6 ):
+        for i in range( args.twn_incr_act, 6 ):
+            q_outs[i] = (0, ( 1 << (2**( i - args.twn_incr_act + 1 ) )) - 1 )
+        for i in range( args.twn_incr_act, 6 ):
             if q_outs[i][1] > ( 1 << 8 ) - 1:
                 q_outs[i] = ( None, None )
         # always output binary to the dense layers and dense layers
@@ -66,14 +76,14 @@ if __name__ == "__main__":
             q_outs[6] = (0,1)
         q_outs[7:9] = [(0,1)]*2
     for idx in range( 1, 8 ):
-        make_conv( idx, model_dir )
-        make_bn( idx, model_dir, r_shift = r_shifts[idx-1], quantize_out = q_outs[idx-1] )
+        make_conv( idx, args.model_dir )
+        make_bn( idx, args.model_dir, r_shift = args.bn_p, quantize_out = q_outs[idx-1] )
     for idx in range( 1, 3 ):
-        make_dense( idx, model_dir )
-        make_bn( idx, model_dir, f_type = "dense_", r_shift = r_shifts[idx+6], quantize_out = q_outs[idx+6] )
-    twn.write_matrix_to_c_ary( model_dir + "/../input_img.csv" )
+        make_dense( idx, args.model_dir )
+        make_bn( idx, args.model_dir, f_type = "dense_", r_shift = args.bn_p, quantize_out = q_outs[idx+6] )
+    twn.write_matrix_to_c_ary( args.model_dir + "/../input_img.csv" )
     if q_outs[8] == (None, None):
-        twn.write_matrix_to_c_ary( model_dir + "/vgg_dense_3.csv", "#define USE_D3_RSHIFT" )
+        twn.write_matrix_to_c_ary( args.model_dir + "/vgg_dense_3.csv", "#define USE_D3_RSHIFT" )
     else:
-        twn.write_matrix_to_c_ary( model_dir + "/vgg_dense_3.csv" )
-    twn.write_matrix_to_c_ary( model_dir + "/pred_output.csv" )
+        twn.write_matrix_to_c_ary( args.model_dir + "/vgg_dense_3.csv" )
+    twn.write_matrix_to_c_ary( args.model_dir + "/pred_output.csv" )
