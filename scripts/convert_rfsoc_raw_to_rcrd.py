@@ -29,7 +29,7 @@ def partition_dataset( d_len ):
     return is_train, is_test
 
 def get_chunk( mod, idx, sig_len, scaling_div ):
-    chunk = np.load("/opt/datasets/rfsoc_iq/dataset_50k/%s_data/chunk_%d.npy" % ( mod, idx ))
+    chunk = np.load("/opt/datasets/rfsoc_iq/dataset_50k_variation/%s_data/chunk_%d.npy" % ( mod, idx ))
     i_data = np.reshape( chunk[0::2], [-1, 4095 ] )/scaling_div
     q_data = np.reshape( chunk[1::2], [-1, 4095 ] )/scaling_div
     starts = np.random.randint( 0, i_data.shape[1] - sig_len, [i_data.shape[0]] )
