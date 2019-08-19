@@ -82,4 +82,4 @@ if __name__ == "__main__":
             for z in range( -20, 32, 2 ):
                 if z in cntr_ary:
                     print( "accr[" + str(z) + "] = " + str( 100*correct_ary[z]/cntr_ary[z] ) )
-    
+

@@ -15,6 +15,8 @@ def get_args():
                         help = "The number of layers with binary activations, -1 => disabled ( default )" )
     parser.add_argument("--bn_p", type=int, default=8,
                         help = "The BN rshift amount" )
+    parser.add_argument("--img_prec", type=int, default=6,
+                        help = "The number of fractional bits for the image" )
     parser.add_argument("--prec", type=int, default=6,
                         help = "The precision of activations" )
     return parser.parse_args()
@@ -77,7 +79,10 @@ if __name__ == "__main__":
         q_outs[7:9] = [(0,1)]*2
     for idx in range( 1, 8 ):
         make_conv( idx, args.model_dir )
-        make_bn( idx, args.model_dir, r_shift = args.bn_p, quantize_out = q_outs[idx-1] )
+        rshift = args.bn_p
+        if idx == 1:
+            rshift += args.img_prec - args.prec
+        make_bn( idx, args.model_dir, r_shift = rshift, quantize_out = q_outs[idx-1] )
     for idx in range( 1, 3 ):
         make_dense( idx, args.model_dir )
         make_bn( idx, args.model_dir, f_type = "dense_", r_shift = args.bn_p, quantize_out = q_outs[idx+6] )
