@@ -219,6 +219,7 @@ void allocate_network( int prec ) {
   n->d[0] = (short*)MALLOC_FUNC(sizeof(short)*DENSE1_OUT );
   n->d[1] = (short*)MALLOC_FUNC(sizeof(short)*DENSE2_OUT );
   n->d[2] = (short*)MALLOC_FUNC(sizeof(short)*VGG_DENSE_3_FILT );
+  no_classes = VGG_DENSE_3_FILT;
 };
 
 void free_network() {

@@ -17,6 +17,8 @@ def get_args():
                          help="The filename to write the classifications to")
     parser.add_argument( "--niter", type = int, default = 410*24*26,
                          help="Number of iterations to run on the rcrd")
+    parser.add_argument( "--fracbits", type = int, default = 6,
+                         help="Number of fractional bits on input")
     parser.add_argument( "--no_mean", action = 'store_true',
                          help="Do not remove the mean from the signal")
     return parser.parse_args()
@@ -41,11 +43,12 @@ def load_file( fname ):
     iterator = dset.make_one_shot_iterator()
     return iterator.get_next()
 
-def test_vec( x ):
-    x = np.round( np.reshape( x, [-1] )*( 1 << 6 ) ).astype( int ).tolist()
+def test_vec( x, fracbits = 6 ):
+    x = np.round( np.reshape( x, [-1] )*( 1 << fracbits ) ).astype( int ).tolist()
     return pyvgg.compute( x )
 
 if __name__ == "__main__":
+    args = get_args()
     test_ptn = args.test_pattern
     if "%d" in test_ptn:
         pattern_files = [ test_ptn % snr for snr in range( -20, 32, 2 ) ]
@@ -65,7 +68,7 @@ if __name__ == "__main__":
                 if not args.no_mean:
                     mean = np.mean( img, axis=0)
                     img = ( img - mean )
-                np_pred = test_vec( img )
+                np_pred = test_vec( img, args.fracbits )
                 preds = np.argmax( np_pred )
                 if z not in cntr_ary:
                     cntr_ary[z] = 0

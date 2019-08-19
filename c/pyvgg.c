@@ -21,7 +21,7 @@ static PyObject* compute(PyObject *self, PyObject *args) {
   }
   short * out_img = compute_network( img );
   PyObject * out_list = PyList_New(0);
-  for ( i = 0; i < NO_CLASSES; i++ ) {
+  for ( i = 0; i < no_classes; i++ ) {
     PyObject * num = Py_BuildValue( "h", (short)(out_img[i]) );
     PyList_Append( out_list, num );
   }
