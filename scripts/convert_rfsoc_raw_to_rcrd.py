@@ -52,24 +52,23 @@ def load_modulation( mod, num_modulations = 50, sig_len = 1024, prec = 10 ):
     return i_ex[is_train,:], q_ex[is_train,:], i_ex[is_test,:], q_ex[is_test,:]
 
 if __name__ == "__main__":
-    i_train = None
     os.environ["CUDA_VISABLE_DEVICES"] = ""
+    i_train = np.reshape( np.array( [] ), [ -1, 1024 ] )
+    q_train = np.reshape( np.array( [] ), [ -1, 1024 ] )
+    i_test = np.reshape( np.array( [] ), [ -1, 1024 ] )
+    q_test = np.reshape( np.array( [] ), [ -1, 1024 ] )
+    train_labels = np.array( [] )
+    test_labels = np.array( [] )
     for j, mod in enumerate(modulations):
         i_tr, q_tr, i_te, q_te = load_modulation( mod, 500 )
-        if i_train is None:
-            i_train = i_tr
-            q_train = q_tr
-            i_test = i_te
-            q_test = q_te
-            train_labels = np.array([j]*i_train.shape[0])
-            test_labels = np.array([j]*i_test.shape[0])
-        else:
-            i_train = np.concatenate( [ i_train, i_tr ] )
-            q_train = np.concatenate( [ q_train, q_tr ] )
-            i_test = np.concatenate( [ i_test, i_te ] )
-            q_test = np.concatenate( [ q_test, q_te ] )
-            train_labels = np.concatenate( [ train_labels, np.array([j]*i_train.shape[0]) ] )
-            test_labels = np.concatenate( [ test_labels, np.array([j]*i_test.shape[0]) ] )
+        print( "For modulation %s, %d examples loaded" % ( mod, len(i_tr) + len(i_te) ) )
+        i_train = np.concatenate( [ i_train, i_tr ] )
+        q_train = np.concatenate( [ q_train, q_tr ] )
+        i_test = np.concatenate( [ i_test, i_te ] )
+        q_test = np.concatenate( [ q_test, q_te ] )
+        train_labels = np.concatenate( [ train_labels, np.array([j]*i_tr.shape[0]) ] )
+        test_labels = np.concatenate( [ test_labels, np.array([j]*i_te.shape[0]) ] )
+    print( "Loaded %d examples" % i_train.shape[0] )
     train_idxs = np.array( list( range( i_train.shape[0] ) ) )
     np.random.shuffle( train_idxs )
     i_train = i_train[train_idxs,:]
