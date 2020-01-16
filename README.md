@@ -63,4 +63,25 @@ To test the quantized performance on all models run
 ```
 
 ## Citations
-TODO: citation for paper
+```latex
+@article{Tridgell:2019:UTN:3361265.3359983,
+ author = {Tridgell, Stephen and Kumm, Martin and Hardieck, Martin and Boland, David and Moss, Duncan and Zipf, Peter and Leong, Philip H. W.},
+ title = {Unrolling Ternary Neural Networks},
+ journal = {ACM Trans. Reconfigurable Technol. Syst.},
+ issue_date = {November 2019},
+ volume = {12},
+ number = {4},
+ month = oct,
+ year = {2019},
+ issn = {1936-7406},
+ pages = {22:1--22:23},
+ articleno = {22},
+ numpages = {23},
+ url = {http://doi.acm.org/10.1145/3359983},
+ doi = {10.1145/3359983},
+ acmid = {3359983},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {Low-precision machine learning, sparse matrix operations, ternary neural networks},
+} 
+```
