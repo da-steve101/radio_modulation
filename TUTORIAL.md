@@ -61,4 +61,13 @@ python3 run_cse_and_generate_example.py --matrix_fname data/conv1_weights.csv --
 ```
 in the twn_generator repository.
 
+Summary
+=======
+1) Train a model with ternary weights
+2) Dump the weights to a CSV
+3) Run CSE to build a tree and share resources
+4) generate verilog for the convolutions
+5) consider exploiting drops in throughputs to save on area
+6) Implement the rest of the network (buffering,maxpool,batchnorm,relu) in verilog ( still a very big job! )
+
 
