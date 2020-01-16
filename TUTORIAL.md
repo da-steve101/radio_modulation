@@ -49,8 +49,8 @@ The module has input vector in, and outputs out.
 For a fully functional layer, there has to be a buffering module producing the windows.
 This is normally followed by a batch normalization and ReLU.
 
-For inference batch normalization is computed with the function f(x) = a*x + b. This is where the eta from before comes in.
-We also need to compute y = eta*x. So this gives the new function f(y) = (a*eta)*x + b. As both a and eta are known, the multiplication between them can be precomputed.
+For inference batch normalization is computed with the function f(x) = a\*x + b. This is where the eta from before comes in.
+We also need to compute y = eta\*x. So this gives the new function f(y) = (a\*eta)\*x + b. As both a and eta are known, the multiplication between them can be precomputed.
 
 The next consideration is max pooling layers. Implementing them is straight forward enough but max pooling layers have important implications of the throughput needed in each layer. Consider for example a max pool layer with a kernel of 2x2 and a stride of 2.
 For a 2d image, this means the output image is 4x smaller than the input image. Or in the next convolutional layer, there will only be new input every 4 cycles. Instead of computing each add in the tree over 1 cycle, serial adders can be used to reduce the area to compute over 4 cycles. This optimization means much smaller designs with no change in throughput. This can also be exploited for activation precisions but I wont go into any further detail here.
